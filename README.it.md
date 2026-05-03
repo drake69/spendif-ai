@@ -224,6 +224,21 @@ Lo script scarica l'immagine pre-compilata da GitHub Container Registry, avvia i
 
 ---
 
+### 🖥️ App desktop nativa (no Docker, no Terminal)
+
+Installer one-click che scaricano il modello AI automaticamente e lanciano una finestra nativa:
+
+| Piattaforma | Comando |
+|-------------|---------|
+| **macOS** | `bash packaging/macos/install.sh` oppure `brew install --cask spendifai` |
+| **Windows** | `winget install Drake69.SpendifAi` oppure esegui `install.ps1` |
+| **Ubuntu/Debian** | `sudo apt install ./spendifai_*.deb` (build: `bash packaging/linux/build-deb.sh`) |
+| **Fedora/RHEL** | `sudo dnf install ./spendifai-*.rpm` (build: `bash packaging/linux/build-rpm.sh`) |
+
+> L'installer rileva l'hardware, scarica il modello LLM migliore per la RAM disponibile (1–7 GB) e configura llama.cpp — **zero intervento utente**. L'app gira in una finestra nativa (pywebview), senza Terminal né browser.
+
+---
+
 ### Installazione developer (nativa, consigliata su Mac)
 
 > Setup completo, convenzioni di codice, sistema di priorità e flusso PR → **[CONTRIBUTING.md](CONTRIBUTING.md)**

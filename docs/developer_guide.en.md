@@ -139,6 +139,10 @@ spendifai/
 │   ├── models.py           # SQLAlchemy tables + idempotent migrations
 │   ├── repository.py       # CRUD queries for services
 │   └── taxonomy_defaults.py # taxonomy templates for 5 languages
+├── desktop/                # native desktop app (pywebview + Streamlit subprocess)
+│   ├── launcher.py         # entry point: starts Streamlit, opens native window
+│   ├── splash.html         # splash screen with model download progress bar
+│   └── __main__.py         # python -m desktop.launcher
 ├── api/                    # FastAPI REST API (optional)
 │   ├── main.py
 │   └── routers/

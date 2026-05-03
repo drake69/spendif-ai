@@ -374,10 +374,11 @@ export CMAKE_ARGS="-DGGML_METAL=on -DGGML_BLAS=off"
 export FORCE_CMAKE=1
 
 # uv sync reads pyproject.toml / uv.lock and creates .venv automatically
-uv sync --python "$PYTHON_BIN" 2>&1 | tail -5 || {
+# --extra desktop: include pywebview for native window (no Terminal needed)
+uv sync --extra desktop --python "$PYTHON_BIN" 2>&1 | tail -5 || {
   warn "uv sync with Metal flags failed — retrying without Metal (CPU-only fallback)..."
   unset CMAKE_ARGS FORCE_CMAKE
-  uv sync --python "$PYTHON_BIN"
+  uv sync --extra desktop --python "$PYTHON_BIN"
 }
 
 ok "Python environment ready"
@@ -411,6 +412,59 @@ if [[ -f "$DB_PATH" ]]; then
   ok "Database up to date"
 else
   info "No database at $DB_PATH — will be created on first app launch (no action needed)"
+fi
+
+# ── Step 11b: Auto-download LLM model (zero user intervention) ───────────
+step "Downloading recommended AI model for your hardware..."
+info "This is a one-time download (1-7 GB depending on your RAM)."
+
+MODEL_RESULT=$(
+  uv run python -c "
+import sys, os
+os.chdir('$INSTALL_DIR')
+sys.path.insert(0, '.')
+from core.model_manager import ensure_model_available
+path = ensure_model_available(progress_callback=lambda pct, msg: print(f'  {pct:.0%}  {msg}', flush=True))
+if path:
+    print(f'MODEL_PATH={path}')
+else:
+    print('MODEL_PATH=')
+" 2>&1 || echo "MODEL_PATH="
+)
+
+MODEL_PATH=$(echo "$MODEL_RESULT" | grep '^MODEL_PATH=' | tail -1 | cut -d= -f2-)
+if [[ -n "$MODEL_PATH" ]]; then
+  ok "AI model ready: $(basename "$MODEL_PATH")"
+
+  # Configure .env to use llama.cpp with the downloaded model
+  ENV_FILE="$INSTALL_DIR/.env"
+  # Set LLM_BACKEND
+  if grep -q "^LLM_BACKEND=" "$ENV_FILE" 2>/dev/null; then
+    python3 -c "
+import re, pathlib
+p = pathlib.Path('$ENV_FILE')
+txt = p.read_text()
+txt = re.sub(r'^LLM_BACKEND=.*$', 'LLM_BACKEND=local_llama_cpp', txt, flags=re.MULTILINE)
+p.write_text(txt)
+"
+  else
+    echo "LLM_BACKEND=local_llama_cpp" >> "$ENV_FILE"
+  fi
+  # Set LLAMA_CPP_MODEL_PATH
+  if grep -q "^LLAMA_CPP_MODEL_PATH=" "$ENV_FILE" 2>/dev/null; then
+    python3 -c "
+import re, pathlib
+p = pathlib.Path('$ENV_FILE')
+txt = p.read_text()
+txt = re.sub(r'^LLAMA_CPP_MODEL_PATH=.*$', 'LLAMA_CPP_MODEL_PATH=$MODEL_PATH', txt, flags=re.MULTILINE)
+p.write_text(txt)
+"
+  else
+    echo "LLAMA_CPP_MODEL_PATH=$MODEL_PATH" >> "$ENV_FILE"
+  fi
+  ok "llama.cpp configured as default LLM backend"
+else
+  warn "Model download failed — the app will retry on first launch"
 fi
 
 # ── Step 12: Generate app icon ────────────────────────────────────────────────
@@ -489,22 +543,21 @@ LAUNCHER_SCRIPT="$APP_BUNDLE/Contents/MacOS/Spendif.ai"
 cat > "$LAUNCHER_SCRIPT" <<LAUNCHER
 #!/usr/bin/env bash
 # =============================================================================
-#  Spendif.ai — app bundle launcher
+#  Spendif.ai — app bundle launcher (native window via pywebview)
 #  This script is executed by macOS when the user double-clicks or opens
 #  the Spendif.ai.app bundle (Spotlight, Launchpad, Dock, etc.)
 #
 #  Behaviour:
 #  1. Reads install directory from ~/.spendifai/install_path.txt
 #  2. Checks for available git updates (non-blocking, writes a flag file)
-#  3. Opens a Terminal window running the Streamlit server
-#  4. Opens the browser to http://localhost:8501 once the server is ready
+#  3. Launches the native desktop wrapper (pywebview + Streamlit subprocess)
+#     — no Terminal window, no browser; everything runs in a native window.
 # =============================================================================
 set -euo pipefail
 
 SPENDIFAI_HOME="\$HOME/.spendifai"
 INSTALL_PATH_FILE="\$SPENDIFAI_HOME/install_path.txt"
 UPDATE_FLAG="\$SPENDIFAI_HOME/.update_available"
-PORT=8501
 
 # ── Locate install directory ─────────────────────────────────────────────────
 if [[ ! -f "\$INSTALL_PATH_FILE" ]]; then
@@ -520,9 +573,6 @@ if [[ ! -d "\$INSTALL_DIR" ]]; then
 fi
 
 # ── Check for updates (non-blocking, runs in background) ────────────────────
-# git fetch + compare HEAD against origin/BRANCH
-# Writes ~/.spendifai/.update_available with the number of commits behind
-# The Streamlit sidebar component reads this file and shows a badge.
 (
   cd "\$INSTALL_DIR"
   if git fetch --quiet origin 2>/dev/null; then
@@ -542,44 +592,10 @@ fi
   fi
 ) &
 
-# ── Kill any existing Streamlit on the same port ────────────────────────────
-EXISTING_PID=\$(lsof -ti tcp:\$PORT 2>/dev/null || true)
-if [[ -n "\$EXISTING_PID" ]]; then
-  # Only kill if it looks like a streamlit/python process
-  if ps -p "\$EXISTING_PID" -o comm= 2>/dev/null | grep -qi python; then
-    kill "\$EXISTING_PID" 2>/dev/null || true
-    sleep 1
-  fi
-fi
-
-# ── Build the shell command to run inside the Terminal window ─────────────────
-# We write a tiny temp script so that AppleScript doesn't need to escape quotes
-TMPSCRIPT=\$(mktemp /tmp/spendifai_launch_XXXXXX.sh)
-cat > "\$TMPSCRIPT" <<'INNEREOF'
-#!/usr/bin/env bash
+# ── Launch native desktop app (pywebview window + embedded Streamlit) ────────
 export PATH="\$HOME/.local/bin:\$PATH"
-INSTALL_DIR="\$(cat "\$HOME/.spendifai/install_path.txt" | tr -d '[:space:]')"
 cd "\$INSTALL_DIR"
-source .venv/bin/activate
-
-echo ""
-echo "  Spendif.ai — avvio in corso..."
-echo "  Apri il browser su: http://localhost:8501"
-echo "  Chiudi questa finestra per fermare l'app."
-echo ""
-
-# Open browser after a short delay to let Streamlit start
-(sleep 3 && open "http://localhost:8501") &
-
-streamlit run app.py \\
-  --server.headless true \\
-  --browser.serverPort 8501 \\
-  --browser.gatherUsageStats false
-INNEREOF
-chmod +x "\$TMPSCRIPT"
-
-# ── Open Terminal and run the launch script ───────────────────────────────────
-open -a Terminal "\$TMPSCRIPT"
+exec uv run python -m desktop.launcher
 LAUNCHER
 
 chmod +x "$LAUNCHER_SCRIPT"

@@ -11,6 +11,7 @@
 1. [Installazione rapida (one-liner Docker)](#1--installazione-rapida-one-liner-docker)
 2. [Installazione Docker Compose da repository](#2--installazione-docker-compose-da-repository)
 3. [Installazione nativa (sviluppo / Mac)](#3--installazione-nativa-sviluppo--mac)
+3b. [App desktop nativa (macOS / Windows / Linux)](#3b--app-desktop-nativa-macos--windows--linux)
 4. [Configurazione `.env`](#4--configurazione-env)
 5. [Aggiornare l'applicazione](#5--aggiornare-lapplicazione)
 6. [Comandi operativi Docker](#6--comandi-operativi-docker)
@@ -142,6 +143,49 @@ uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 > Il database `ledger.db` viene creato automaticamente nella cartella del progetto al primo avvio.
+
+---
+
+## 3b — App desktop nativa (macOS / Windows / Linux)
+
+Spendif.ai può girare come **applicazione desktop nativa** — una finestra nativa (pywebview) che incorpora il server Streamlit. Nessun Terminal, nessun browser esterno.
+
+### Caratteristiche
+
+- **Finestra nativa** con WebKit (macOS), Edge WebView2 (Windows) o GTK/WebKit (Linux)
+- **Download automatico del modello LLM** consigliato per l'hardware (1–7 GB in base alla RAM)
+- **Configurazione llama.cpp zero-touch** — al primo avvio tutto funziona senza intervento
+- **Splash screen** con progress bar durante il caricamento
+
+### Installazione per piattaforma
+
+| Piattaforma | Comando |
+|-------------|---------|
+| **macOS** (installer) | `bash packaging/macos/install.sh` |
+| **macOS** (Homebrew) | `brew tap drake69/spendifai && brew install --cask spendifai` |
+| **Windows** | Right-click `install.ps1` → "Esegui con PowerShell" |
+| **Windows** (winget) | `winget install Drake69.SpendifAi` |
+| **Ubuntu/Debian** (.deb) | `bash packaging/linux/build-deb.sh && sudo apt install ./build/spendifai_*.deb` |
+| **Ubuntu/Debian** (script) | `bash packaging/linux/install-debian.sh` |
+| **Red Hat/Fedora** (.rpm) | `bash packaging/linux/build-rpm.sh && sudo dnf install ./build/spendifai-*.rpm` |
+| **Red Hat/Fedora** (script) | `bash packaging/linux/install-redhat.sh` |
+
+### Avvio da sviluppatore
+
+```bash
+uv sync --extra desktop
+uv run python -m desktop.launcher
+```
+
+### Cosa fa l'installer
+
+1. Installa Python, uv e le dipendenze di sistema (pywebview richiede WebKit/GTK su Linux)
+2. Clona il repository e crea il virtualenv con `uv sync --extra desktop`
+3. Rileva l'hardware (RAM, GPU) e scarica il modello GGUF consigliato da HuggingFace
+4. Configura `.env` con `LLM_BACKEND=local_llama_cpp` e il path del modello
+5. Crea un launcher (`.app` su macOS, shortcut su Windows, `.desktop` su Linux)
+
+> **Dati utente:** il database e i modelli sono in `~/.spendifai/` (macOS/Linux) o `%APPDATA%\Spendif.ai\` (Windows), separati dal codice. Reinstallare il codice non tocca i dati.
 
 ---
 

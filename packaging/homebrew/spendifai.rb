@@ -25,17 +25,16 @@ cask "spendifai" do
   desc "Personal finance manager with local AI categorisation"
   homepage "https://github.com/drake69/spendify"
 
-  # App bundle extracted from DMG
-  app "Spendif.ai.app"
+  # App bundle extracted from DMG (native pywebview window, no Terminal)
+  app "SpendifAi.app", target: "Spendif.ai.app"
 
-  # Post-install: create data dirs used by the application
+  # Post-install: create data dirs and download default AI model
   postflight do
-    mkdir "#{Dir.home}/.spendifai"
-    mkdir "#{Dir.home}/.spendifai/models"
+    system "mkdir", "-p", "#{Dir.home}/.spendifai/models"
   end
 
   # Gracefully quit the app before uninstall
-  uninstall quit: "ai.spendif.app"
+  uninstall quit: "ai.spendif.desktop"
 
   # Remove all user data on `brew uninstall --zap`
   zap trash: [

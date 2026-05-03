@@ -705,8 +705,9 @@ _Info "First run may take a few minutes (downloading all packages)..."
 Push-Location $InstallDir
 try {
     # Base install via uv sync (uses pyproject.toml / uv.lock)
+    # --extra desktop: include pywebview for native window (no browser needed)
     # uv.lock pins all versions, so this is fully reproducible.
-    uv sync --quiet
+    uv sync --extra desktop --quiet
     _OK "Base dependencies installed"
 
     # ── llama-cpp-python: CPU or CUDA ────────────────────────────────────────
@@ -759,6 +760,53 @@ if (Test-Path $DB_PATH) {
     }
 } else {
     _Info "No database at $DB_PATH -- will be created on first app launch"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Step 13b: Auto-download LLM model (zero user intervention)
+# ─────────────────────────────────────────────────────────────────────────────
+_Step "Downloading recommended AI model for your hardware..."
+_Info "This is a one-time download (1-7 GB depending on your RAM)."
+
+Push-Location $InstallDir
+try {
+    $modelResult = & (Join-Path $InstallDir ".venv\Scripts\python.exe") -c @"
+import sys, os
+os.chdir(r'$InstallDir')
+sys.path.insert(0, '.')
+from core.model_manager import ensure_model_available
+path = ensure_model_available(progress_callback=lambda pct, msg: print(f'  {pct:.0%}  {msg}', flush=True))
+print(f'MODEL_PATH={path or ""}')
+"@ 2>&1
+
+    $modelPath = ($modelResult | Select-String '^MODEL_PATH=').ToString() -replace '^MODEL_PATH=',''
+    if ($modelPath -and $modelPath -ne "None") {
+        _OK "AI model ready: $(Split-Path $modelPath -Leaf)"
+
+        # Configure .env to use llama.cpp with the downloaded model
+        $envContent = Get-Content $ENV_FILE -Raw -ErrorAction SilentlyContinue
+        if ($envContent) {
+            if ($envContent -match '(?m)^LLM_BACKEND=') {
+                $envContent = $envContent -replace '(?m)^LLM_BACKEND=.*$', 'LLM_BACKEND=local_llama_cpp'
+            } else {
+                $envContent += "`nLLM_BACKEND=local_llama_cpp"
+            }
+            $modelPathFwd = $modelPath -replace '\\','/'
+            if ($envContent -match '(?m)^LLAMA_CPP_MODEL_PATH=') {
+                $envContent = $envContent -replace '(?m)^LLAMA_CPP_MODEL_PATH=.*$', "LLAMA_CPP_MODEL_PATH=$modelPathFwd"
+            } else {
+                $envContent += "`nLLAMA_CPP_MODEL_PATH=$modelPathFwd"
+            }
+            $envContent | Set-Content $ENV_FILE -Encoding UTF8 -NoNewline
+        }
+        _OK "llama.cpp configured as default LLM backend"
+    } else {
+        _Warn "Model download failed -- the app will retry on first launch"
+    }
+} catch {
+    _Warn "Model download failed ($_) -- the app will retry on first launch"
+} finally {
+    Pop-Location
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -834,17 +882,10 @@ if not exist "$InstallDir\.venv\Scripts\activate.bat" (
 )
 call "$InstallDir\.venv\Scripts\activate.bat"
 
-:: ── Launch Streamlit ──────────────────────────────────────────────────────────
-echo.
-echo   Spendif.ai -- starting...
-echo   Browser will open at: http://localhost:8501
-echo   Close this window to stop the app.
-echo.
-
-:: Open the browser after a 4-second delay (gives Streamlit time to start)
-start "" cmd /c "timeout /t 4 /nobreak >nul && start http://localhost:8501"
-
-streamlit run app.py --server.headless true --browser.gatherUsageStats false
+:: ── Launch native desktop app (pywebview window + embedded Streamlit) ────────
+:: The desktop.launcher module starts Streamlit as a subprocess and shows
+:: a native window via pywebview — no Terminal, no browser needed.
+python -m desktop.launcher
 "@ | Set-Content $LAUNCH_BAT -Encoding UTF8
 
 _OK "launch.bat written"

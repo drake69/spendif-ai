@@ -251,6 +251,68 @@ new version directory — do not modify the old one.
 
 ---
 
+## 5b. Linux Packages (.deb / .rpm)
+
+### .deb (Ubuntu / Debian / Mint)
+
+Build script: `packaging/linux/build-deb.sh`
+
+```bash
+cd sw_artifacts
+bash packaging/linux/build-deb.sh              # uses VERSION file
+bash packaging/linux/build-deb.sh --version 1.2.3  # explicit version
+```
+
+Produces: `build/spendifai_<version>_amd64.deb`
+
+The `.deb` installs source code to `/opt/spendifai/`. The `postinst` script:
+1. Installs `uv` if not present
+2. Runs `uv sync --extra desktop` to create the Python venv
+3. Detects GPU (NVIDIA CUDA)
+4. Downloads the recommended AI model from HuggingFace
+5. Configures `.env` with `LLM_BACKEND=local_llama_cpp`
+6. Registers the `.desktop` launcher and updates the icon cache
+
+Dependencies declared in `Depends:`: `python3`, `python3-venv`, `python3-dev`, `python3-gi`, `gir1.2-webkit2-4.1`, `git`, `curl`, `gcc`, `cmake`, `pkg-config`.
+
+Install/uninstall:
+```bash
+sudo apt install ./build/spendifai_0.1.0_amd64.deb
+sudo apt remove spendifai       # removes code, preserves ~/.spendifai/
+```
+
+### .rpm (Fedora / RHEL / Rocky / Alma)
+
+Build script: `packaging/linux/build-rpm.sh`
+
+```bash
+cd sw_artifacts
+bash packaging/linux/build-rpm.sh              # uses VERSION file
+bash packaging/linux/build-rpm.sh --version 1.2.3
+```
+
+Requires: `rpm-build` (`sudo dnf install rpm-build`)
+
+Produces: `build/spendifai-<version>-1.noarch.rpm`
+
+Same post-install logic as the `.deb`. Dependencies: `python3`, `python3-devel`, `python3-gobject`, `webkit2gtk4.1`, `git`, `curl`, `gcc`, `cmake`.
+
+Install/uninstall:
+```bash
+sudo dnf install ./build/spendifai-0.1.0-1.noarch.rpm
+sudo dnf remove spendifai
+```
+
+### Interactive installers (no package manager)
+
+For users who prefer not to use .deb/.rpm:
+- Ubuntu/Debian: `bash packaging/linux/install-debian.sh`
+- Red Hat/Fedora: `bash packaging/linux/install-redhat.sh`
+
+Both scripts install to `~/.local/share/Spendif.ai/` (no sudo required for the code, only for system packages).
+
+---
+
 ## 6. GitHub Actions CI/CD (Future)
 
 A fully automated release pipeline via GitHub Actions would eliminate the need

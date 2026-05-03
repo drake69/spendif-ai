@@ -160,6 +160,10 @@ spendifai/
 │   ├── faq_classifier.py   # match deterministico TF-IDF
 │   ├── kb_store.py         # caricamento FAQ e documenti (knowledge base)
 │   └── knowledge/<lang>/   # FAQ e doc per lingua
+├── desktop/                # app desktop nativa (pywebview + subprocess Streamlit)
+│   ├── launcher.py         # entry point: avvia Streamlit, apre finestra nativa
+│   ├── splash.html         # splash screen con progress bar download modello
+│   └── __main__.py         # python -m desktop.launcher
 ├── api/                    # REST API FastAPI (opzionale)
 │   ├── main.py
 │   └── routers/

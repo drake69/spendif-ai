@@ -210,100 +210,26 @@ if ! $SKIP_DMG; then
   info "Generating icon at ${ICNS_PATH}..."
   run python3 "${SCRIPT_DIR}/macos/create_icon.py"
 
-  # 5b — Assemble .app bundle
-  APP_NAME="Spendif.ai"
+  # 5b — Build native .app via PyInstaller + pywebview
+  APP_NAME="SpendifAi"
   APP_DIR="${BUILD_DIR}/${APP_NAME}.app"
-  MACOS_BIN="${APP_DIR}/Contents/MacOS"
-  RESOURCES_DIR="${APP_DIR}/Contents/Resources"
 
+  info "Building native .app via PyInstaller..."
   if ! $DRY_RUN; then
-    rm -rf "${APP_DIR}"
-    mkdir -p "${MACOS_BIN}" "${RESOURCES_DIR}"
+    # Update version in desktop.spec's Info.plist
+    cd "${REPO_ROOT}"
+    run uv run --extra desktop pyinstaller desktop.spec --noconfirm --clean \
+      --distpath "${BUILD_DIR}" --workpath "${BUILD_DIR}/pyinstaller_work"
 
-    # Launcher script — opens a Terminal and starts Streamlit
-    cat > "${MACOS_BIN}/SpendifAi" << 'LAUNCHER'
-#!/usr/bin/env bash
-# Spendif.ai launcher — starts Streamlit and opens the browser
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-
-# Locate the repo root (packaged alongside the .app in the DMG Applications symlink)
-REPO_ROOT="$(dirname "${APP_ROOT}")"
-
-# Look for the app.py relative to a typical installation at ~/Applications
-INSTALL_CANDIDATES=(
-  "${HOME}/.spendifai/repo"
-  "${HOME}/Applications/Spendif.ai-repo"
-  "/Applications/Spendif.ai-repo"
-)
-
-APP_PY=""
-for CANDIDATE in "${INSTALL_CANDIDATES[@]}"; do
-  if [[ -f "${CANDIDATE}/app.py" ]]; then
-    APP_PY="${CANDIDATE}/app.py"
-    REPO="${CANDIDATE}"
-    break
-  fi
-done
-
-if [[ -z "${APP_PY}" ]]; then
-  osascript -e 'display alert "Spendif.ai" message "Could not find app.py. Please run the installer first." as critical'
-  exit 1
-fi
-
-# Launch Streamlit in a new Terminal window
-osascript <<OSASCRIPT
-tell application "Terminal"
-  activate
-  do script "cd '${REPO}' && streamlit run app.py"
-end tell
-OSASCRIPT
-LAUNCHER
-
-    chmod +x "${MACOS_BIN}/SpendifAi"
-
-    # Copy icon if it exists
-    if [[ -f "${ICNS_PATH}" ]]; then
-      cp "${ICNS_PATH}" "${RESOURCES_DIR}/spendifai.icns"
+    # Rename if PyInstaller outputs SpendifAi.app, we need Spendif.ai.app for DMG
+    if [[ -d "${BUILD_DIR}/SpendifAi.app" ]]; then
+      APP_DIR="${BUILD_DIR}/SpendifAi.app"
     fi
-
-    # Info.plist
-    cat > "${APP_DIR}/Contents/Info.plist" << PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleName</key>
-  <string>Spendif.ai</string>
-  <key>CFBundleDisplayName</key>
-  <string>Spendif.ai</string>
-  <key>CFBundleIdentifier</key>
-  <string>ai.spendif.app</string>
-  <key>CFBundleVersion</key>
-  <string>${NEW_VERSION}</string>
-  <key>CFBundleShortVersionString</key>
-  <string>${NEW_VERSION}</string>
-  <key>CFBundleExecutable</key>
-  <string>SpendifAi</string>
-  <key>CFBundleIconFile</key>
-  <string>spendifai</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleSignature</key>
-  <string>SPAI</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>12.0</string>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>LSUIElement</key>
-  <false/>
-</dict>
-</plist>
-PLIST
+    APP_NAME="$(basename "${APP_DIR}" .app)"
 
     ok ".app bundle created at ${APP_DIR}"
   else
-    echo "[DRY-RUN] Would create .app bundle at ${APP_DIR}"
+    echo "[DRY-RUN] Would run PyInstaller to create ${APP_DIR}"
   fi
 
   # 5c — Create DMG
