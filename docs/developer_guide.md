@@ -1184,6 +1184,7 @@ gh pr create --title "bench: M1 Max results" --body "Aggiunge risultati benchmar
 | Preview match nella form "Nuova regola" (issue #15) | Prima di creare una regola, `rules_page.py` chiama `tx_svc.get_by_rule_pattern()` e mostra quante transazioni esistenti corrispondono. Se N > 0 compare un checkbox (default True) per applicare la categoria anche alle transazioni già presenti — stesso comportamento del form di modifica regola. |
 | Chatbot: `ChatBotEngine` invalidato al cambio backend | Il chatbot è cached in `st.session_state["chatbot"]` per evitare reload a ogni interazione. `settings_page.py` cancella la chiave al salvataggio delle impostazioni LLM, forzando la reinizializzazione con il nuovo backend alla prossima apertura della pagina Chat. |
 | Chatbot: TF-IDF su 150 Q&A + 5 manuali, nessun vector DB | Corpus totale < 1 MB: TF-IDF in-memory è sufficiente. Vector DB (Chroma/Qdrant) aggiunto solo se il corpus supera ~500 item. Sorgente canonica in `documents/06_knowledge_base/`; `knowledge/{lang}/` è artifact generato. |
+| Auto-invalidazione schema cached | Se Flow 1 produce < 10% di transazioni parsabili, lo schema è corrotto. L'orchestrator lo elimina dal DB e ritenta con Flow 2 (LLM). Soglia: `_SCHEMA_INVALIDATION_THRESHOLD = 0.10` in `orchestrator.py`. All'avvio, la migrazione `_migrate_purge_orphan_schemas` elimina le righe `document_schema` senza `header_sha256`. |
 
 ---
 

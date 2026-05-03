@@ -525,6 +525,8 @@ Spendif.ai remembers the structure of each imported file (columns, date format, 
 
 > **When to use:** if the import summary shows discarded rows with reason "Importo non parsabile" for income (or expense) rows, the saved schema probably uses the wrong sign convention. Clear and re-import.
 
+> **Auto-invalidation:** Spendif.ai automatically detects broken schemas. If a file imported with a cached schema produces fewer than 10% parseable transactions, the schema is deleted and the file is re-analysed from scratch using the LLM — no manual intervention needed.
+
 ---
 
 ## Benchmark tools (for advanced users)

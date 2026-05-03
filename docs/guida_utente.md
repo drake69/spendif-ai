@@ -525,6 +525,8 @@ Spendif.ai memorizza la struttura di ogni file importato (colonne, formato date,
 
 > **Quando serve:** se il riepilogo import mostra righe scartate con motivo "Importo non parsabile" per le entrate (o le uscite), lo schema salvato probabilmente usa una convenzione di segno sbagliata. Cancella e reimporta.
 
+> **Auto-invalidazione:** Spendif.ai rileva automaticamente gli schema corrotti. Se un file importato con uno schema salvato produce meno del 10% di transazioni parsabili, lo schema viene eliminato e il file viene rianalizzato da zero con l'LLM — senza intervento manuale.
+
 **Reset tassonomia:** se vuoi cambiare la lingua della tassonomia dopo l'onboarding, vai in **⚙️ Impostazioni → 🔄 Reset tassonomia**, scegli la lingua e conferma. Le categorie esistenti vengono sostituite con quelle del template scelto.
 
 ---

@@ -27,7 +27,7 @@ The `ledger.db` file contains **everything** — there are no other data files t
 | `transaction` | All imported transactions |
 | `category_rule` | Deterministic categorisation rules |
 | `description_rule` | Description cleaning rules |
-| `document_schema` | CSV/XLSX file schemas (columns, format, etc.) |
+| `document_schema` | CSV/XLSX file schemas (columns, format, etc.). Schemas without `header_sha256` are automatically purged on startup (`_migrate_purge_orphan_schemas` migration). At runtime, schemas with parse rate < 10% are auto-invalidated and deleted. |
 | `user_settings` | User settings (LLM, locale, date format, contexts, onboarding flag…) |
 | `account` | User-defined bank accounts (name + bank) |
 | `taxonomy_category` / `taxonomy_subcategory` | Editable user taxonomy |

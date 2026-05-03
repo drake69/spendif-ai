@@ -125,6 +125,7 @@ Aggregates heterogeneous movements files (current accounts, credit cards, debit 
 | **Trigger** | `DocumentSchema` already in DB for that column fingerprint | First import of a new format |
 | **Schema** | Retrieved from DB and applied directly | LLM infers the schema from an anonymized sample |
 | **Promotion** | — | Approved Flow 2 template is saved and becomes Flow 1 |
+| **Auto-invalidation** | If parse rate < 10%, schema is deleted and Flow 2 retry is triggered automatically | — |
 | **LLM cost** | Zero (categorization only) | One call for classification + one for batch categorization |
 
 ---

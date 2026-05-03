@@ -704,6 +704,7 @@ See [`tests/README.md`](../tests/README.md) for full benchmark documentation.
 | Match preview in "New rule" form (issue #15) | Before creating a rule, `rules_page.py` calls `tx_svc.get_by_rule_pattern()` and shows how many existing transactions match. If N > 0, a checkbox (default True) lets the user also apply the category to those transactions — same behaviour as the edit-rule form. |
 | Chatbot: `ChatBotEngine` invalidated on backend change | The chatbot is cached in `st.session_state["chatbot"]`. `settings_page.py` clears it on LLM settings save, forcing re-initialisation with the new backend on next visit to the Chat page. |
 | Chatbot: TF-IDF over 150 Q&A + 5 manuals, no vector DB | Total corpus < 1 MB: in-memory TF-IDF is sufficient. A vector DB (Chroma/Qdrant) would only be added if the corpus exceeded ~500 items. Canonical source in `documents/06_knowledge_base/`; `knowledge/{lang}/` is a generated artifact. |
+| Cached schema auto-invalidation | If Flow 1 produces < 10% parseable transactions, the schema is broken. The orchestrator deletes it from the DB and retries with Flow 2 (LLM). Threshold: `_SCHEMA_INVALIDATION_THRESHOLD = 0.10` in `orchestrator.py`. On startup, the `_migrate_purge_orphan_schemas` migration deletes `document_schema` rows without `header_sha256`. |
 
 ---
 

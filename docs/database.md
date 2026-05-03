@@ -27,7 +27,7 @@ Il file `ledger.db` contiene **tutto** — non esistono altri file di dati da co
 | `transaction` | Tutte le transazioni importate |
 | `category_rule` | Regole deterministiche di categorizzazione |
 | `description_rule` | Regole di pulizia delle descrizioni |
-| `document_schema` | Schemi dei file CSV/XLSX (colonne, formato, ecc.) |
+| `document_schema` | Schemi dei file CSV/XLSX (colonne, formato, ecc.). Gli schema senza `header_sha256` vengono eliminati automaticamente all'avvio (migrazione `_migrate_purge_orphan_schemas`). A runtime, schema con parse rate < 10% vengono auto-invalidati e rimossi. |
 | `user_settings` | Impostazioni utente (LLM, locale, formato date, contesti, flag onboarding…) |
 | `account` | Conti bancari definiti dall'utente (nome + banca) |
 | `taxonomy_category` / `taxonomy_subcategory` | Tassonomia personalizzata (modificabile) |

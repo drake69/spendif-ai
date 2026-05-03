@@ -117,6 +117,7 @@ Aggrega movimenti eterogenei (conti correnti, carte di credito, carte di debito,
 | **Attivazione** | `DocumentSchema` già in DB per quel fingerprint colonne | Prima importazione di un nuovo formato |
 | **Schema** | Recuperato da DB, applicato direttamente | LLM inferisce lo schema da un campione anonimizzato |
 | **Promozione** | — | Il template Flow 2 approvato viene salvato e diventa Flow 1 |
+| **Auto-invalidazione** | Se il parse rate < 10%, lo schema viene eliminato e Flow 2 viene ritentato automaticamente | — |
 | **Costo LLM** | Zero (solo categorizzazione) | Una chiamata per classificazione + una per categorizzazione batch |
 
 ---

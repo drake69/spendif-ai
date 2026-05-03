@@ -65,6 +65,16 @@ On the **first import** of a file with an unknown format (header SHA256 not pres
 
 After confirmation, the schema is saved with the `header_sha256` fingerprint. On re-import of the same format: immediate lookup, no LLM call, no UI.
 
+### Schema auto-invalidation
+
+If a cached schema (Flow 1) produces fewer than **10%** parseable transactions relative to the total file rows, it is considered broken (e.g. wrong `date_format`, stale column mapping). In this case the orchestrator:
+
+1. Deletes the invalid schema from the DB
+2. Retries with Flow 2 (LLM re-classification)
+3. If Flow 2 also fails, the import returns an error
+
+Additionally, on application startup a migration automatically purges orphan schemas (`document_schema` rows without `header_sha256`), which would be unreachable by the header-hash lookup path.
+
 ---
 
 ## Cascading Categorization
