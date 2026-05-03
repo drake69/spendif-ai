@@ -155,6 +155,17 @@ def find_schema_by_header_sha256(session: Session, header_sha256: str) -> Option
     return _row_to_schema(row)
 
 
+def delete_document_schema(session: Session, source_identifier: str) -> bool:
+    """Delete a single cached schema by source_identifier. Returns True if a row was deleted."""
+    count = (
+        session.query(DocumentSchemaModel)
+        .filter_by(source_identifier=source_identifier)
+        .delete()
+    )
+    session.flush()
+    return count > 0
+
+
 def delete_all_schemas(session: Session) -> int:
     """Delete all cached document schemas. Returns the number of rows deleted."""
     count = session.query(DocumentSchemaModel).delete()

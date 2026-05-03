@@ -876,6 +876,12 @@ def process_file(
             f"process_file: account_label overridden to '{doc_schema.account_label}' for {filename}"
         )
 
+    # Ensure header_sha256 is always populated on the schema before persist.
+    # Without this fingerprint, schema cache lookup by header hash fails and
+    # the schema becomes an orphan reachable only by cols_key.
+    if not doc_schema.header_sha256:
+        doc_schema.header_sha256 = compute_header_sha256(raw_bytes, filename)
+
     # ── 3-Phase Footer Stripping (post-schema) ─────────────────────────────
     _total_footer_stripped = 0
 
@@ -967,6 +973,80 @@ def process_file(
     _total_file_rows = len(df_raw)
     transactions, _norm_skipped, _merge_count = _normalize_df_with_schema(df_raw, doc_schema, filename)
     _progress(0.35)
+
+    # ── Schema auto-invalidation ─────────────────────────────────────────────
+    # If a cached schema (Flow 1) produces a catastrophically low parse rate,
+    # the schema is broken (e.g. wrong date_format, stale column mapping).
+    # Delete it from the DB and retry with Flow 2 (LLM re-classification).
+    _SCHEMA_INVALIDATION_THRESHOLD = 0.10  # < 10% parsed → schema is broken
+    if (
+        flow_used == "flow1"
+        and _total_file_rows > 0
+        and len(transactions) / _total_file_rows < _SCHEMA_INVALIDATION_THRESHOLD
+    ):
+        _src_id = getattr(doc_schema, "source_identifier", None)
+        logger.warning(
+            "process_file: cached schema for %s produced %d/%d transactions (%.0f%%) "
+            "— below %.0f%% threshold. Invalidating schema '%s' and retrying with Flow 2.",
+            filename, len(transactions), _total_file_rows,
+            100 * len(transactions) / _total_file_rows,
+            100 * _SCHEMA_INVALIDATION_THRESHOLD,
+            _src_id,
+        )
+        if _src_id:
+            from db.repository import delete_document_schema
+            from db.models import get_session as _get_session
+            _inv_session = _get_session()
+            try:
+                delete_document_schema(_inv_session, _src_id)
+                _inv_session.commit()
+                logger.info("process_file: deleted invalid schema '%s' from DB", _src_id)
+            finally:
+                _inv_session.close()
+
+        # Retry: re-classify with Flow 2
+        flow_used = "flow2_retry"
+        doc_schema = classify_document(
+            df_raw=df_raw,
+            llm_backend=backend,
+            source_name=filename,
+            sanitize=True,
+            sanitize_config=config.sanitize_config,
+            fallback_backend=fallback,
+            amount_plausibility_cap=config.max_transaction_amount,
+            header_certain=_preprocess_info.header_certain,
+            account_type=_account_type,
+            classifier_mode=config.classifier_mode,
+        )
+        if doc_schema is not None and _schema_is_usable(doc_schema):
+            if account_label_override and account_label_override.strip():
+                doc_schema.account_label = account_label_override.strip()
+            transactions, _norm_skipped, _merge_count = _normalize_df_with_schema(
+                df_raw, doc_schema, filename,
+            )
+            logger.info(
+                "process_file: Flow 2 retry for %s produced %d/%d transactions",
+                filename, len(transactions), _total_file_rows,
+            )
+        else:
+            logger.warning(
+                "process_file: Flow 2 retry for %s failed — classify_document returned unusable schema",
+                filename,
+            )
+            return ImportResult(
+                batch_sha256=batch_sha256,
+                source_name=filename,
+                transactions=[],
+                doc_schema=doc_schema,
+                reconciliations=[],
+                transfer_links=[],
+                errors=["Cached schema was invalid; Flow 2 re-classification also failed"],
+                flow_used=flow_used,
+                total_file_rows=_total_file_rows,
+                header_rows_skipped=_header_rows_skipped,
+                skipped_rows=_norm_skipped,
+                merged_count=_merge_count,
+            )
 
     # Case 5: remove within-file card balance/totale summary row (double-counting guard)
     _doc_str = doc_schema.doc_type.value if hasattr(doc_schema.doc_type, 'value') else str(doc_schema.doc_type)

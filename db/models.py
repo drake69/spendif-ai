@@ -156,6 +156,7 @@ def create_tables(engine=None):
     _migrate_add_category_model(engine)
     _migrate_add_llm_usage_log(engine)
     _migrate_set_onboarding_done_for_existing_users(engine)  # must run last
+    _migrate_purge_orphan_schemas(engine)  # cleanup: remove schemas without header_sha256
 
     # ── persist hash so next startup skips migrations ────────────────
     if hash_file.name:
@@ -1005,4 +1006,27 @@ def _migrate_add_llm_usage_log(engine) -> None:
             'n_ctx INTEGER, '
             'duration_ms INTEGER)'
         ))
+        conn.commit()
+
+
+def _migrate_purge_orphan_schemas(engine) -> None:
+    """Delete cached document_schema rows that have no header_sha256.
+
+    These orphans are unreachable by the fast header-hash lookup path
+    and may contain stale/incorrect mappings (e.g. wrong date_format)
+    that cause 100% parse failures on re-import.  Idempotent: only
+    deletes rows where header_sha256 IS NULL or empty string.
+    """
+    from sqlalchemy import text as _text
+    with engine.connect() as conn:
+        result = conn.execute(_text(
+            "DELETE FROM document_schema "
+            "WHERE header_sha256 IS NULL OR header_sha256 = ''"
+        ))
+        if result.rowcount:
+            import logging
+            logging.getLogger("SPENDIFY").info(
+                "migrate: purged %d orphan document_schema row(s) without header_sha256",
+                result.rowcount,
+            )
         conn.commit()
