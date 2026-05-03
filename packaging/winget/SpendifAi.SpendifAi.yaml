@@ -1,4 +1,4 @@
-# Drake69.SpendifAi.yaml — winget version manifest
+# SpendifAi.SpendifAi.yaml — winget version manifest
 #
 # This is a TEMPLATE file. The `PackageVersion` field is updated automatically
 # by packaging/release.sh each time a new version is released.
@@ -10,11 +10,11 @@
 #   3. Open a pull request against microsoft/winget-pkgs main branch.
 #   4. The winget-bot (Windows Package Manager Bot) will validate the manifests
 #      and installers automatically. Address any bot comments.
-#   5. Once merged, users can install with: winget install Drake69.SpendifAi
+#   5. Once merged, users can install with: winget install SpendifAi.SpendifAi
 #
 # Schema reference: https://aka.ms/winget-manifest.version.1.6.0.schema.json
 
-PackageIdentifier: Drake69.SpendifAi
+PackageIdentifier: SpendifAi.SpendifAi
 PackageVersion: 0.1.0
 DefaultLocale: en-US
 ManifestType: version

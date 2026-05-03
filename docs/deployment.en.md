@@ -164,7 +164,7 @@ Spendif.ai can run as a **native desktop application** — a native window (pywe
 | **macOS** (installer) | `bash packaging/macos/install.sh` |
 | **macOS** (Homebrew) | `brew tap drake69/spendifai && brew install --cask spendifai` |
 | **Windows** | Right-click `install.ps1` → "Run with PowerShell" |
-| **Windows** (winget) | `winget install Drake69.SpendifAi` |
+| **Windows** (winget) | `winget install SpendifAi.SpendifAi` |
 | **Ubuntu/Debian** (.deb) | `bash packaging/linux/build-deb.sh && sudo apt install ./build/spendifai_*.deb` |
 | **Ubuntu/Debian** (script) | `bash packaging/linux/install-debian.sh` |
 | **Red Hat/Fedora** (.rpm) | `bash packaging/linux/build-rpm.sh && sudo dnf install ./build/spendifai-*.rpm` |

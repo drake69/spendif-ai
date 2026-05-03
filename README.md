@@ -248,7 +248,7 @@ One-click installers that download the AI model automatically and launch a nativ
 | Platform | Command |
 |----------|---------|
 | **macOS** | `bash packaging/macos/install.sh` or `brew install --cask spendifai` |
-| **Windows** | `winget install Drake69.SpendifAi` or run `install.ps1` |
+| **Windows** | `winget install SpendifAi.SpendifAi` or run `install.ps1` |
 | **Ubuntu/Debian** | `sudo apt install ./spendifai_*.deb` (build with `bash packaging/linux/build-deb.sh`) |
 | **Fedora/RHEL** | `sudo dnf install ./spendifai-*.rpm` (build with `bash packaging/linux/build-rpm.sh`) |
 

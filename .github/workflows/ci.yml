@@ -314,7 +314,14 @@ jobs:
             installer/install.sh \
             installer/uninstall.sh \
             benchmark/run_benchmark_full.sh \
-            docker/benchmark_entrypoint.sh
+            docker/benchmark_entrypoint.sh \
+            packaging/macos/install.sh \
+            packaging/macos/uninstall.sh \
+            packaging/linux/install-debian.sh \
+            packaging/linux/install-redhat.sh \
+            packaging/linux/uninstall.sh \
+            packaging/linux/build-deb.sh \
+            packaging/linux/build-rpm.sh
 
       # ── Trivy (Docker image vulnerabilities) ────────────
       - name: Build Docker image for scanning
@@ -381,3 +388,27 @@ jobs:
             }
             Write-Host '✅ uninstall.ps1 syntax OK'
           "
+
+      - name: Validate native installer .ps1 syntax (PowerShell)
+        run: |
+          for f in packaging/windows/install.ps1 packaging/windows/uninstall.ps1; do
+            pwsh -NoProfile -Command "
+              \$err = \$null
+              \$null = [System.Management.Automation.Language.Parser]::ParseFile(
+                (Resolve-Path '$f'),
+                [ref]\$null,
+                [ref]\$err
+              )
+              if (\$err.Count -gt 0) {
+                \$err | ForEach-Object { Write-Error \$_.Message }
+                exit 1
+              }
+              Write-Host '✅ $f syntax OK'
+            "
+          done
+
+      - name: Validate Linux package build scripts (syntax)
+        run: |
+          for f in packaging/linux/build-deb.sh packaging/linux/build-rpm.sh; do
+            bash -n "$f" && echo "✅ $f syntax OK"
+          done

@@ -203,10 +203,10 @@ pip install winget-manifest-validator  # community tool, not official
 
 After `packaging/release.sh` runs, manifests are at:
 ```
-build/winget/manifests/d/Drake69/SpendifAi/<version>/
-  Drake69.SpendifAi.yaml
-  Drake69.SpendifAi.installer.yaml
-  Drake69.SpendifAi.locale.en-US.yaml
+build/winget/manifests/d/SpendifAi/SpendifAi/<version>/
+  SpendifAi.SpendifAi.yaml
+  SpendifAi.SpendifAi.installer.yaml
+  SpendifAi.SpendifAi.locale.en-US.yaml
 ```
 
 Steps to submit:
@@ -215,19 +215,19 @@ Steps to submit:
 
 2. **Create a branch** in your fork:
    ```bash
-   git checkout -b Drake69.SpendifAi-<version>
+   git checkout -b SpendifAi.SpendifAi-<version>
    ```
 
 3. **Copy manifests** to the correct path in the fork:
    ```bash
-   mkdir -p manifests/d/Drake69/SpendifAi/<version>
-   cp build/winget/manifests/d/Drake69/SpendifAi/<version>/* \
-      manifests/d/Drake69/SpendifAi/<version>/
+   mkdir -p manifests/d/SpendifAi/SpendifAi/<version>
+   cp build/winget/manifests/d/SpendifAi/SpendifAi/<version>/* \
+      manifests/d/SpendifAi/SpendifAi/<version>/
    ```
 
 4. **Validate locally** (optional but recommended):
    ```bash
-   winget validate --manifest manifests/d/Drake69/SpendifAi/<version>/
+   winget validate --manifest manifests/d/SpendifAi/SpendifAi/<version>/
    ```
 
 5. **Push and open a PR** against `microsoft/winget-pkgs main`
@@ -241,7 +241,7 @@ Steps to submit:
 
 7. **Merge**: Once approved, the package is available within ~24 hours:
    ```powershell
-   winget install Drake69.SpendifAi
+   winget install SpendifAi.SpendifAi
    ```
 
 ### Updating an existing version

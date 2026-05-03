@@ -919,7 +919,41 @@ $created = New-Shortcut `
 if ($created) { _OK "Desktop shortcut: $desktopLnk" }
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Step 18: Final summary
+#  Step 18: Register in Add/Remove Programs (Windows Apps & features)
+# ─────────────────────────────────────────────────────────────────────────────
+_Step "Registering in Add/Remove Programs..."
+
+$UninstallScript = Join-Path $InstallDir "packaging\windows\uninstall.ps1"
+$RegKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\SpendifAi"
+
+try {
+    $version = "0.0.0"
+    $versionFile = Join-Path $InstallDir "VERSION"
+    if (Test-Path $versionFile) {
+        $version = (Get-Content $versionFile -Raw).Trim()
+    }
+
+    New-Item -Path $RegKey -Force | Out-Null
+    Set-ItemProperty -Path $RegKey -Name "DisplayName" -Value "Spendif.ai"
+    Set-ItemProperty -Path $RegKey -Name "DisplayVersion" -Value $version
+    Set-ItemProperty -Path $RegKey -Name "Publisher" -Value "Spendif.ai"
+    Set-ItemProperty -Path $RegKey -Name "InstallLocation" -Value $InstallDir
+    Set-ItemProperty -Path $RegKey -Name "UninstallString" -Value "powershell -ExecutionPolicy Bypass -File `"$UninstallScript`""
+    Set-ItemProperty -Path $RegKey -Name "QuietUninstallString" -Value "powershell -ExecutionPolicy Bypass -File `"$UninstallScript`" -Silent"
+    Set-ItemProperty -Path $RegKey -Name "NoModify" -Value 1 -Type DWord
+    Set-ItemProperty -Path $RegKey -Name "NoRepair" -Value 1 -Type DWord
+
+    # Icon
+    $icoPath = "$env:SystemRoot\System32\shell32.dll,13"
+    Set-ItemProperty -Path $RegKey -Name "DisplayIcon" -Value $icoPath
+
+    _OK "Registered in Add/Remove Programs"
+} catch {
+    _Warn "Could not register in Add/Remove Programs: $_"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Step 19: Final summary
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  +============================================================+" -ForegroundColor Green
