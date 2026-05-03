@@ -16,6 +16,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Ubuntu/Debian installer (`packaging/linux/install-debian.sh`) and .deb builder
 - Red Hat/Fedora installer (`packaging/linux/install-redhat.sh`) and .rpm builder
 - PyInstaller spec file for building standalone .app (macOS) and .exe (Windows)
+- Uninstall scripts for macOS, Windows (with `-Silent` flag), and Linux
+- Windows Add/Remove Programs registration during install
+- Linux CI workflow (`release-linux.yml`): builds .deb/.rpm, smoke-tests in containers, attaches to GitHub Release
+- winget identifier renamed to `SpendifAi.SpendifAi`
 
 ### Fixed
 - Schema auto-invalidation: cached schemas (Flow 1) producing < 10% parse rate are automatically deleted and retried with Flow 2 (LLM re-classification)

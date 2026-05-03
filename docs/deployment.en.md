@@ -335,3 +335,22 @@ The script asks separately for each component:
 | Docker images | `ghcr.io/drake69/spendify` + `ollama/ollama` (~500 MB–1 GB) |
 | Installation folder | `~/spendifai/` (or `SPENDIFAI_INSTALL_DIR`) |
 | Docker Desktop removal guide | Step-by-step guide for macOS / Linux / Windows |
+
+### Uninstalling the native desktop app
+
+For native installations (non-Docker), each platform has its own uninstaller:
+
+| Channel | Command |
+|---------|---------|
+| **macOS** (script) | `bash packaging/macos/uninstall.sh` |
+| **macOS** (Homebrew) | `brew uninstall --cask spendifai` (to also remove data: `--zap`) |
+| **Windows** (script) | `.\packaging\windows\uninstall.ps1` (supports `-Silent`) |
+| **Windows** (Apps & features) | Settings → Apps → Spendif.ai → Uninstall |
+| **Windows** (winget) | `winget uninstall SpendifAi.SpendifAi` |
+| **Ubuntu/Debian** | `sudo apt remove spendifai` |
+| **Fedora/RHEL** | `sudo dnf remove spendifai` |
+| **Linux** (script) | `bash packaging/linux/uninstall.sh` |
+
+All uninstallers ask for **interactive confirmation** before removing user data (`~/.spendifai/`). AI models are asked separately (they can be 1–7 GB).
+
+> **Data preserved:** uninstalling the code (via package manager or script) does **not** remove the database and models in `~/.spendifai/`. For a full cleanup, use the uninstall script or manually remove `~/.spendifai/`.
