@@ -181,7 +181,8 @@ _CUSTOM_LIST="benchmark/.custom_packages"
 _pkg_version() {
     local pkg_under="$1"
     local search_dir="${2:-$_SITE_PKGS}"
-    local di=$(ls -d "${search_dir}/${pkg_under}-"*.dist-info 2>/dev/null | head -1)
+    local di
+    di=$(find "${search_dir}" -maxdepth 1 -name "${pkg_under}-*.dist-info" -type d 2>/dev/null | head -1)
     [ -z "$di" ] && echo "" && return
     basename "$di" | sed "s/^${pkg_under}-//" | sed 's/\.dist-info$//'
 }
@@ -202,8 +203,10 @@ _backup_custom() {
     local n=0
     while IFS= read -r pkg; do
         [ -z "$pkg" ] || [[ "$pkg" == \#* ]] && continue
-        local pkg_under=$(echo "$pkg" | tr '-' '_')
-        local ver=$(_pkg_version "$pkg_under")
+        local pkg_under
+        pkg_under=$(echo "$pkg" | tr '-' '_')
+        local ver
+        ver=$(_pkg_version "$pkg_under")
         [ -z "$ver" ] && continue  # not installed, nothing to protect
         # Copy package dir + dist-info + .libs
         for d in "$_SITE_PKGS/${pkg_under}" \
@@ -237,9 +240,9 @@ _restore_if_downgraded() {
         fi
         echo "[sync] $pkg_under: $action"
         # Remove whatever uv put in
-        rm -rf "$_SITE_PKGS/${pkg_under}" \
-               "$_SITE_PKGS/${pkg_under}-"*.dist-info \
-               "$_SITE_PKGS/${pkg_under}.libs"
+        rm -rf "${_SITE_PKGS:?}/${pkg_under}" \
+               "${_SITE_PKGS:?}/${pkg_under}-"*.dist-info \
+               "${_SITE_PKGS:?}/${pkg_under}.libs"
         # Restore backup
         for d in "$_CUSTOM_BACKUP/${pkg_under}" \
                  "$_CUSTOM_BACKUP/${pkg_under}-${old_ver}.dist-info" \
@@ -506,7 +509,9 @@ if [ "$SKIP_OLLAMA" = false ]; then
                 OLLAMA_PULL_ARGS=()
                 [ "$OLLAMA_URL" != "http://localhost:11434" ] && \
                     OLLAMA_PULL_ARGS+=(--insecure)
-                OLLAMA_HOST="${OLLAMA_URL#http://}" OLLAMA_HOST="${OLLAMA_HOST%%/*}" \
+                _ollama_host="${OLLAMA_URL#http://}"
+                _ollama_host="${_ollama_host%%/*}"
+                OLLAMA_HOST="$_ollama_host" \
                     ollama pull "$tag" ${OLLAMA_PULL_ARGS[@]+"${OLLAMA_PULL_ARGS[@]}"} || \
                     echo "  [WARN] pull failed for $tag — will skip in benchmark"
                 OLLAMA_PULLED=$((OLLAMA_PULLED + 1))
@@ -592,7 +597,7 @@ USE_OLLAMA=false
 USE_VLLM=false
 USE_VLLM_OFFLINE=false
 # --skip-llama skips only the install/download step, not the backend itself
-ls "$MODELS_DIR"/*.gguf 2>/dev/null | grep -q . && USE_LLAMA=true
+compgen -G "$MODELS_DIR"/*.gguf >/dev/null 2>&1 && USE_LLAMA=true
 [ "$SKIP_OLLAMA" = false ] && USE_OLLAMA=true
 [ "$SKIP_VLLM" = false ] && [ -n "$VLLM_MODEL" ] && USE_VLLM=true
 [ "$SKIP_VLLM_OFFLINE" = false ] && [ "$VLLM_OFFLINE_MODELS_COUNT" -gt 0 ] && USE_VLLM_OFFLINE=true

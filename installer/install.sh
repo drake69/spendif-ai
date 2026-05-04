@@ -82,7 +82,7 @@ docker compose $PROFILE_ARGS up -d
 
 # ── 6. Attendi che l'app sia pronta ───────────────────────────────────────────
 info "Attendo che l'app sia pronta..."
-for i in $(seq 1 30); do
+for _i in $(seq 1 30); do
     if curl -sf "$APP_URL/_stcore/health" >/dev/null 2>&1; then
         break
     fi

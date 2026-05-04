@@ -74,8 +74,10 @@ else:
         exit 1
     fi
 
-    local repo=$(echo "$info" | cut -d'|' -f1)
-    local filename=$(echo "$info" | cut -d'|' -f2)
+    local repo
+    repo=$(echo "$info" | cut -d'|' -f1)
+    local filename
+    filename=$(echo "$info" | cut -d'|' -f2)
     local dest="$MODELS_DIR/$filename"
 
     if [ -f "$dest" ]; then
@@ -94,7 +96,8 @@ print('  Download complete')
 # ── Run benchmark for one model ───────────────────────────────────────────���──
 run_one_model() {
     local gguf_path="$1"
-    local model_name=$(basename "$gguf_path" .gguf)
+    local model_name
+    model_name=$(basename "$gguf_path" .gguf)
 
     echo ""
     echo "──────────────────────────────────────────────────────────"
