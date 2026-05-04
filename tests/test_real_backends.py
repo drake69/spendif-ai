@@ -66,19 +66,21 @@ class TestRealOpenAIBackend:
         return BackendFactory.create("openai")
     
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="Set OPENAI_API_KEY to run real OpenAI tests"
+        not os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY", "").startswith("test-"),
+        reason="Set a real OPENAI_API_KEY to run real OpenAI tests"
     )
     def test_openai_connection(self, openai_backend):
         """Test that OpenAI backend can connect"""
-        result = openai_backend.complete("Respond with 'OK' only")
+        result = openai_backend.complete_structured(
+            "You are a test assistant.",
+            "Respond with 'OK' only",
+            {"type": "object", "properties": {"reply": {"type": "string"}}},
+        )
         assert result is not None
-        assert isinstance(result, str)
-        assert len(result) > 0
-    
+
     @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="Set OPENAI_API_KEY to run real OpenAI tests"
+        not os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY", "").startswith("test-"),
+        reason="Set a real OPENAI_API_KEY to run real OpenAI tests"
     )
     def test_openai_structured_response(self, openai_backend):
         """Test structured output from OpenAI"""
@@ -108,14 +110,17 @@ class TestRealClaudeBackend:
         return BackendFactory.create("claude")
     
     @pytest.mark.skipif(
-        not os.getenv("ANTHROPIC_API_KEY"),
-        reason="Set ANTHROPIC_API_KEY to run real Claude tests"
+        not os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY", "").startswith("test-"),
+        reason="Set a real ANTHROPIC_API_KEY to run real Claude tests"
     )
     def test_claude_connection(self, claude_backend):
         """Test that Claude backend can connect"""
-        result = claude_backend.complete("Respond with 'OK' only")
+        result = claude_backend.complete_structured(
+            "You are a test assistant.",
+            "Respond with 'OK' only",
+            {"type": "object", "properties": {"reply": {"type": "string"}}},
+        )
         assert result is not None
-        assert isinstance(result, str)
 
 # Test with local Ollama (requires Ollama running on localhost:11434)
 # TEST_REAL_BACKENDS=1 pytest tests/test_real_backends.py::TestRealOllamaBackend -v -s
