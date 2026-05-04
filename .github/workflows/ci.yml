@@ -144,7 +144,7 @@ jobs:
         # Viene eseguito anche in caso di failure del check precedente
         # (if: always()) così il contributore vede subito cosa ha rotto.
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
