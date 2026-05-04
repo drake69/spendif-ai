@@ -68,47 +68,42 @@ def _do_ollama_pull(base_url: str, model: str) -> None:
 
 def _autodetect_ctx_llama() -> None:
     """on_change callback: read GGUF context length and update session state."""
-    from core.llm_backends import LlamaCppBackend
+    from services.llm_service import detect_llama_cpp_context
     path = st.session_state.get("_wgt_llama_path", "")
-    if not path:
-        try:
-            path = LlamaCppBackend._default_model_path()
-        except Exception:
-            return
-    ctx = LlamaCppBackend.read_gguf_context_length(path)
+    ctx = detect_llama_cpp_context(path)
     if ctx:
         st.session_state["_wgt_llama_n_ctx"] = ctx
 
 
 def _autodetect_ctx_ollama() -> None:
     """on_change callback: query Ollama /api/show for context length."""
-    from core.llm_backends import OllamaBackend
+    from services.llm_service import detect_ollama_context
     model   = st.session_state.get("_wgt_ollama_model", "")
     base_url = st.session_state.get("_wgt_ollama_url", "http://localhost:11434")
-    ctx = OllamaBackend.fetch_context_length(model, base_url)
+    ctx = detect_ollama_context(model, base_url)
     st.session_state["_ollama_ctx_detected"] = ctx
 
 
 def _autodetect_ctx_openai() -> None:
     """on_change callback: lookup known context window for OpenAI models."""
-    from core.llm_backends import _KNOWN_CONTEXT
+    from services.llm_service import get_known_context_window
     model = st.session_state.get("_wgt_openai_model", "")
-    st.session_state["_openai_ctx_detected"] = _KNOWN_CONTEXT.get(model)
+    st.session_state["_openai_ctx_detected"] = get_known_context_window(model)
 
 
 def _autodetect_ctx_claude() -> None:
     """on_change callback: lookup known context window for Claude models."""
-    from core.llm_backends import _KNOWN_CONTEXT
+    from services.llm_service import get_known_context_window
     model = st.session_state.get("_wgt_claude_model", "")
-    st.session_state["_claude_ctx_detected"] = _KNOWN_CONTEXT.get(model)
+    st.session_state["_claude_ctx_detected"] = get_known_context_window(model)
 
 
 def _autodetect_ctx_vllm() -> None:
     """on_change callback: query vLLM /v1/models for context length."""
-    from core.llm_backends import VllmBackend
+    from services.llm_service import detect_vllm_context
     base_url = st.session_state.get("_wgt_vllm_url", "http://localhost:8000/v1")
     model    = st.session_state.get("_wgt_vllm_model", "")
-    ctx = VllmBackend.fetch_context_length(base_url, model)
+    ctx = detect_vllm_context(base_url, model)
     st.session_state["_vllm_ctx_detected"] = ctx
 
 
@@ -127,7 +122,7 @@ def _do_llm_test(
     **extra_kwargs,
 ) -> None:
     """Send a minimal test prompt to the configured LLM backend."""
-    from core.llm_backends import BackendFactory, LLMValidationError
+    from services.llm_service import create_backend, LLMValidationError
 
     try:
         kwargs: dict = {"timeout": 15}
@@ -148,7 +143,7 @@ def _do_llm_test(
             kwargs["api_key"] = api_key
             kwargs["model"] = model
 
-        llm = BackendFactory.create(backend, **kwargs)
+        llm = create_backend(backend, **kwargs)
 
         with st.spinner(t("settings.test_llm_spinner")):
             result = llm.complete_structured(
@@ -558,7 +553,7 @@ def render_settings_page(engine):
 
     if backend == "local_llama_cpp":
         st.caption(t("settings.llama_cpp.caption"))
-        from core.llm_backends import LlamaCppBackend, DEFAULT_GGUF_MODELS
+        from services.llm_service import list_local_llama_cpp_models, get_default_gguf_models, read_gguf_context_length, download_gguf_model
 
         llama_cpp_model_path = st.text_input(
             t("settings.llama_cpp.model_path"),
@@ -583,7 +578,7 @@ def render_settings_page(engine):
         )
 
         # Show locally available models + allow selecting one (auto-fills path + n_ctx)
-        local_models = LlamaCppBackend.list_local_models()
+        local_models = list_local_llama_cpp_models()
         if local_models:
             st.markdown(t("settings.llama_cpp.local_models"))
 
@@ -592,7 +587,7 @@ def render_settings_page(engine):
                 if idx is not None:
                     m = local_models[idx]
                     st.session_state["_wgt_llama_path"] = m["path"]
-                    ctx = LlamaCppBackend.read_gguf_context_length(m["path"])
+                    ctx = read_gguf_context_length(m["path"])
                     if ctx:
                         st.session_state["_wgt_llama_n_ctx"] = ctx
 
@@ -616,7 +611,7 @@ def render_settings_page(engine):
         st.markdown(t("settings.llama_cpp.download_title"))
         model_options = {
             f"{v['description']}  ({v['size_gb']} GB)": k
-            for k, v in DEFAULT_GGUF_MODELS.items()
+            for k, v in get_default_gguf_models().items()
         }
         selected_model_label = st.selectbox(
             t("settings.llama_cpp.download_model"),
@@ -625,7 +620,7 @@ def render_settings_page(engine):
             label_visibility="collapsed",
         )
         selected_model_key = model_options[selected_model_label]
-        selected_model_info = DEFAULT_GGUF_MODELS[selected_model_key]
+        selected_model_info = get_default_gguf_models()[selected_model_key]
 
         btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
         with btn_col1:
@@ -641,7 +636,7 @@ def render_settings_page(engine):
                                 t("settings.llama_cpp.downloading", done=f"{downloaded / (1024**2):.0f}", total=f"{total / (1024**2):.0f}")
                             )
                     with st.spinner(f"Download {selected_model_key}…"):
-                        dest = LlamaCppBackend.download_model(
+                        dest = download_gguf_model(
                             selected_model_info["url"],
                             progress_callback=_progress,
                         )
@@ -836,7 +831,7 @@ def render_settings_page(engine):
         cat_backend = _BACKEND_OPTIONS[cat_backend_label]
 
         if cat_backend == "local_llama_cpp":
-            from core.llm_backends import LlamaCppBackend
+            from services.llm_service import list_local_llama_cpp_models, read_gguf_context_length
             cat_llama_cpp_model_path = st.text_input(
                 t("settings.llama_cpp.model_path"),
                 value=settings.get("cat_llama_cpp_model_path", ""),
@@ -856,14 +851,14 @@ def render_settings_page(engine):
                 min_value=512, max_value=1048576, step=512,
                 key="_wgt_cat_llama_n_ctx",
             )
-            local_models = LlamaCppBackend.list_local_models()
+            local_models = list_local_llama_cpp_models()
             if local_models:
                 def _on_cat_local_model_select():
                     idx = st.session_state.get("_wgt_cat_llama_local_select")
                     if idx is not None:
                         m = local_models[idx]
                         st.session_state["_wgt_cat_llama_path"] = m["path"]
-                        ctx = LlamaCppBackend.read_gguf_context_length(m["path"])
+                        ctx = read_gguf_context_length(m["path"])
                         if ctx:
                             st.session_state["_wgt_cat_llama_n_ctx"] = ctx
 

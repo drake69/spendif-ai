@@ -10,8 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from core.history_engine import get_description_profiles
-from db.models import get_session
+from services.llm_service import get_description_profiles
 from services.settings_service import SettingsService
 from services.transaction_service import TransactionService
 from support.formatting import format_amount_display
@@ -510,8 +509,7 @@ def render_analysis_page(engine):
     st.subheader(t("analytics.associations_title"))
     st.caption(t("analytics.associations_caption"))
 
-    with get_session(engine) as _hist_session:
-        _profiles = get_description_profiles(_hist_session)
+    _profiles = get_description_profiles(engine)
 
     # Filter: only descriptions with at least 3 validated transactions
     _profiles = [p for p in _profiles if p.total_validated >= 3]

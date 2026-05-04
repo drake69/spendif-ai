@@ -210,14 +210,14 @@ class TestRunStep0AnalysisAmount:
         assert result.amount_semantics == "unclear"
 
     def test_neutral_amount_column_with_data(self):
-        """Single amount column detected from content → neutral."""
+        """Single amount column detected from content → signed_single."""
         df = pd.DataFrame({
             "Date": ["01/01/2025"],
             "Description": ["test"],
             "Amount": ["-10.50"],
         })
         result = _run_step0_analysis(list(df.columns), df_raw=df)
-        assert result.amount_semantics == "neutral"
+        assert result.amount_semantics == "signed_single"
         assert result.amount_col == "Amount"
 
 
@@ -590,26 +590,26 @@ class TestRunStep0AnalysisEdgeCases:
         assert result.date_col is not None
         assert result.date_accounting_col is not None
 
-    def test_single_amount_col_is_neutral(self):
-        """Single amount column → neutral semantics (LLM decides direction)."""
+    def test_single_amount_col_is_signed_single(self):
+        """Single amount column → signed_single semantics (deterministic sign)."""
         df = pd.DataFrame({
             "Data": ["01/01/2025", "02/01/2025"],
             "Causale": ["desc1", "desc2"],
             "Addebito": ["10.00", "20.00"],
         })
         result = _run_step0_analysis(list(df.columns), df_raw=df)
-        assert result.amount_semantics == "neutral"
+        assert result.amount_semantics == "signed_single"
         assert result.amount_col == "Addebito"
 
-    def test_single_credit_col_is_neutral(self):
-        """Single amount column → neutral semantics (LLM decides direction)."""
+    def test_single_credit_col_is_signed_single(self):
+        """Single amount column → signed_single semantics (deterministic sign)."""
         df = pd.DataFrame({
             "Data": ["01/01/2025", "02/01/2025"],
             "Causale": ["desc1", "desc2"],
             "Accredito": ["10.00", "20.00"],
         })
         result = _run_step0_analysis(list(df.columns), df_raw=df)
-        assert result.amount_semantics == "neutral"
+        assert result.amount_semantics == "signed_single"
         assert result.amount_col == "Accredito"
 
 

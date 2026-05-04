@@ -254,38 +254,35 @@ class TestDropLowVariabilityColumns:
         assert dropped == []
         assert list(result.columns) == list(df.columns)
 
-    def test_drops_constant_column(self):
-        """A column with the same value on every row should be dropped.
+    def test_constant_column_preserved(self):
+        """A column with the same non-null value on every row is preserved.
 
-        With 100 rows: 1 unique / 100 rows = 1 % < 1.5 % threshold → dropped.
+        Only completely empty columns are dropped (all NaN/null).
+        Constant non-null columns are kept — they may contain useful data
+        (e.g. card number, account holder name).
         """
         df = _make_tx_df(100)
-        df["Nome titolare"] = "Mario Rossi"   # constant — will be dropped
+        df["Nome titolare"] = "Mario Rossi"   # constant but not empty → kept
         result, dropped = drop_low_variability_columns(df, "amex.csv")
-        assert "Nome titolare" in dropped
-        assert "Nome titolare" not in result.columns
+        assert "Nome titolare" not in dropped
+        assert "Nome titolare" in result.columns
 
-    def test_drops_near_constant_column(self):
-        """A column that barely varies (< 1.5 %) should also be dropped."""
+    def test_drops_completely_empty_column(self):
+        """A column that is entirely NaN/null should be dropped."""
         n = 100
         df = _make_tx_df(n)
-        # Only 1 unique value among 100 rows → ratio = 1/100 = 1 % < 1.5 %
-        df["Numero carta"] = "**** **** **** 1234"
+        df["Colonna vuota"] = pd.NA
         result, dropped = drop_low_variability_columns(df, "amex.csv")
-        assert "Numero carta" in dropped
+        assert "Colonna vuota" in dropped
+        assert "Colonna vuota" not in result.columns
 
     def test_preserves_minimum_two_columns(self):
-        """Even if all columns are constant, at least 2 are kept.
-
-        With n=100 rows: 1 unique / 100 = 1 % < 1.5 % for every column,
-        so all three are flagged. But max_droppable = 3 - 2 = 1, so only
-        one column is removed, leaving exactly 2.
-        """
+        """Even if all columns are empty, at least 2 are kept."""
         n = 100
         df = pd.DataFrame({
-            "A": ["x"] * n,
-            "B": ["y"] * n,
-            "C": ["z"] * n,
+            "A": [pd.NA] * n,
+            "B": [pd.NA] * n,
+            "C": [pd.NA] * n,
         })
         result, dropped = drop_low_variability_columns(df, "edge.csv")
         assert len(result.columns) == 2

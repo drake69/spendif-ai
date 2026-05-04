@@ -412,11 +412,10 @@ def _step3_confirm(cfg_svc: SettingsService, lang_options: list[tuple[str, str]]
     # ── LLM Model status ───────────────────────────────────────────────
     st.write("")
     st.markdown(t("onboarding.step3.llm_title"))
-    from core.model_manager import detect_hw, list_local_models
-    from config import get_recommended_model
+    from services.llm_service import detect_system_hardware, list_available_models, get_recommended_model
 
-    _hw = detect_hw()
-    _local = list_local_models()
+    _hw = detect_system_hardware()
+    _local = list_available_models()
     _rec = get_recommended_model(_hw["ram_gb"])
 
     if _local:
