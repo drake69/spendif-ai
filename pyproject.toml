@@ -56,5 +56,5 @@ addopts = "-m 'not llm'"
 testpaths = ["tests"]
 
 [tool.bandit]
-exclude_dirs = ["tests", "tools", "benchmark", "scripts"]
+exclude_dirs = ["tests", "tools", "benchmark", "scripts", "quarantine"]
 skips = ["B101"]  # assert used in tests / dev tooling

@@ -253,15 +253,16 @@ jobs:
 
       - name: Run Bandit — code injection & security checks
         run: |
-          uv run bandit -r core/ services/ db/ api/ chat_bot/ quarantine/ support/ \
+          uv run bandit -r core/ services/ db/ api/ chat_bot/ support/ desktop/ \
             -c pyproject.toml \
             -f json -o bandit-report.json \
             || true
           # Pretty-print summary and fail on HIGH severity
-          uv run bandit -r core/ services/ db/ api/ chat_bot/ quarantine/ support/ \
+          uv run bandit -r core/ services/ db/ api/ chat_bot/ support/ desktop/ \
             -c pyproject.toml \
             -ll -ii
           # -ll = only HIGH severity, -ii = only HIGH confidence → hard gate
+          # Note: quarantine/ excluded — archived/dead code, not shipped
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4
