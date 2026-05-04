@@ -325,9 +325,12 @@ jobs:
             --requirement <(uv pip freeze) \
             --format json --output pip-audit-report.json \
             || true
+          # Strict gate: fail on known CVEs with available fixes.
+          # --ignore-vuln for CVEs without upstream fix (no action possible).
           uv run pip-audit \
             --requirement <(uv pip freeze) \
-            --strict
+            --strict \
+            --ignore-vuln CVE-2025-69872
 
       - name: Upload pip-audit report
         uses: actions/upload-artifact@v4
