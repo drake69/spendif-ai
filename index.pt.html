@@ -983,14 +983,16 @@
   <div class="container">
     <div class="section-label">Instalação</div>
     <h2>Um comando, app pronto</h2>
-    <p class="section-sub">Apenas o <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style="color:var(--blue)">Docker Desktop</a> é necessário. Sem git clone, sem configuração.</p>
+    <p class="section-sub">App desktop nativa com IA local incluída. Sem Docker, sem Terminal sempre aberto.</p>
 
     <div class="os-tabs">
-      <button class="os-tab active" onclick="switchOS('mac')">🍎 Mac / Linux</button>
+      <button class="os-tab active" onclick="switchOS('mac')">🍎 macOS</button>
+      <button class="os-tab" onclick="switchOS('deb')">🐧 Debian / Ubuntu</button>
+      <button class="os-tab" onclick="switchOS('rhel')">🎩 Fedora / RHEL</button>
       <button class="os-tab" onclick="switchOS('win')">🪟 Windows</button>
     </div>
 
-    <!-- Mac / Linux -->
+    <!-- macOS -->
     <div class="os-panel active" id="panel-mac">
       <div class="code-block fade-in">
         <div class="code-header">
@@ -1001,7 +1003,39 @@
           <button class="copy-btn" onclick="copyCode(this, 'mac')">Copiar</button>
         </div>
         <div class="code-body">
-          <div><span class="p">$ </span><span class="c">curl</span><span class="a"> -fsSL https://raw.githubusercontent.com/drake69/spendify/main/installer/install.sh | bash</span></div>
+          <div><span class="p">$ </span><span class="c">curl</span><span class="a"> -fsSL https://raw.githubusercontent.com/drake69/spendify/main/packaging/macos/install.sh | bash</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Debian / Ubuntu -->
+    <div class="os-panel" id="panel-deb">
+      <div class="code-block fade-in">
+        <div class="code-header">
+          <div class="code-dots">
+            <span class="d1"></span><span class="d2"></span><span class="d3"></span>
+          </div>
+          <span class="code-label">bash</span>
+          <button class="copy-btn" onclick="copyCode(this, 'deb')">Copiar</button>
+        </div>
+        <div class="code-body">
+          <div><span class="p">$ </span><span class="c">curl</span><span class="a"> -fsSL https://raw.githubusercontent.com/drake69/spendify/main/packaging/linux/install-debian.sh | bash</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fedora / RHEL -->
+    <div class="os-panel" id="panel-rhel">
+      <div class="code-block fade-in">
+        <div class="code-header">
+          <div class="code-dots">
+            <span class="d1"></span><span class="d2"></span><span class="d3"></span>
+          </div>
+          <span class="code-label">bash</span>
+          <button class="copy-btn" onclick="copyCode(this, 'rhel')">Copiar</button>
+        </div>
+        <div class="code-body">
+          <div><span class="p">$ </span><span class="c">curl</span><span class="a"> -fsSL https://raw.githubusercontent.com/drake69/spendify/main/packaging/linux/install-redhat.sh | bash</span></div>
         </div>
       </div>
     </div>
@@ -1017,24 +1051,59 @@
           <button class="copy-btn" onclick="copyCode(this, 'win')">Copiar</button>
         </div>
         <div class="code-body">
-          <div><span class="p">PS&gt; </span><span class="c">irm</span><span class="a"> https://raw.githubusercontent.com/drake69/spendify/main/installer/install.ps1 | iex</span></div>
+          <div><span class="p">PS&gt; </span><span class="c">irm</span><span class="a"> https://raw.githubusercontent.com/drake69/spendify/main/packaging/windows/install.ps1 | iex</span></div>
         </div>
       </div>
     </div>
 
     <p class="install-post">
-      O script baixa a imagem do <strong>GitHub Container Registry</strong>, inicia o container
-      e abre o navegador em <strong>http://localhost:8501</strong> automaticamente.<br>
-      <strong>IA local opcional:</strong> o instalador pergunta se deseja adicionar Ollama com <code>gemma3:12b</code> — baixado em segundo plano (~8 GB). Funciona em Apple Silicon (arm64) e amd64.<br>
-      <small>Para desinstalar: <code>curl -fsSL https://raw.githubusercontent.com/drake69/spendify/main/installer/uninstall.sh | bash</code></small>
+      O script detecta seu hardware, baixa o modelo de IA ideal para sua RAM (1–7 GB) e configura tudo — <strong>zero intervenção</strong>.<br>
+      O app aparece em Launchpad / Menu Iniciar / gerenciador de arquivos, pronto para usar.
     </p>
 
     <p class="install-dev-link">
-      Desenvolvedor ou instalação nativa? →
-      <a href="https://github.com/drake69/spendify/blob/main/docs/installazione.en.md" target="_blank">Guia completo (Mac nativo · Linux Docker · Windows llama.cpp)</a>
+      Desenvolvedor ou instalação manual? →
+      <a href="https://github.com/drake69/spendify/blob/main/docs/installazione.en.md" target="_blank">Guia completo</a>
     </p>
+
+    <!-- ── Docker (alternativa) ──────────────────────────────────────── -->
+    <div style="margin-top: 2.5rem; padding-top: 2rem; border-top: 1px solid var(--border);">
+      <h3 style="color: var(--blue); margin-bottom: 0.5rem;">🐳 Prefere Docker?</h3>
+      <p style="color: var(--muted); margin-bottom: 1.2rem;">
+        Apenas o <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style="color:var(--blue)">Docker Desktop</a> é necessário. Container oficial do GitHub Container Registry, navegador em <strong>http://localhost:8501</strong>.
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+        <div style="background: var(--surface2); border-radius: 8px; padding: 1rem;">
+          <strong style="color: var(--text);">🍎 macOS / 🐧 Linux</strong>
+          <div class="code-block" style="margin-top: 0.5rem;">
+            <div class="code-body" style="font-size: 0.85rem;">
+              <div><span class="c">curl</span> -fsSL https://raw.githubusercontent.com/drake69/spendify/main/installer/install.sh | bash</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: var(--surface2); border-radius: 8px; padding: 1rem;">
+          <strong style="color: var(--text);">🪟 Windows</strong>
+          <div class="code-block" style="margin-top: 0.5rem;">
+            <div class="code-body" style="font-size: 0.85rem;">
+              <div><span class="c">irm</span> https://raw.githubusercontent.com/drake69/spendify/main/installer/install.ps1 | iex</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </section>
+
+<!-- ── Comunidade / suporte ─────────────────────────────────────────────── -->
+<div style="text-align: center; padding: 2.5rem 1rem 1rem; max-width: 760px; margin: 0 auto;">
+  <p style="color: var(--muted); font-size: 0.95rem; line-height: 1.8;">
+    🆘 <strong style="color: var(--text);">Precisa de ajuda?</strong> <a href="https://github.com/drake69/spendify/issues" target="_blank">Abra uma issue no GitHub</a> — bugs, perguntas, pedidos de funcionalidades.<br>
+    ⭐ <strong style="color: var(--text);">Gosta do Spendif.ai?</strong> <a href="https://github.com/drake69/spendify" target="_blank">Dê-nos uma estrela</a> — ajuda a chegar aos registros oficiais (Homebrew Core, winget).
+  </p>
+</div>
 
 <hr class="divider">
 
@@ -1131,6 +1200,9 @@
       <li><span class="dot"></span>REST API para integrações externas</li>
       <li><span class="dot"></span>Versão multi-usuário com autenticação</li>
       <li><span class="dot"></span>App mobile — visualizador de extrato e análises</li>
+      <li><span class="dot"></span>Distribuição via <strong>Homebrew</strong> (macOS) — <code>brew install --cask spendifai</code></li>
+      <li><span class="dot"></span>Pacotes <code>.deb</code> e <code>.rpm</code> como release assets do GitHub</li>
+      <li><span class="dot"></span>Distribuição via <strong>winget</strong> (Windows) — <code>winget install SpendifAi.SpendifAi</code></li>
     </ul>
   </div>
 </section>
@@ -1209,8 +1281,10 @@
 
   /* Copy install command */
   const installCmds = {
-    mac: 'curl -fsSL https://raw.githubusercontent.com/drake69/spendify/main/installer/install.sh | bash',
-    win: 'irm https://raw.githubusercontent.com/drake69/spendify/main/installer/install.ps1 | iex'
+    mac:  'curl -fsSL https://raw.githubusercontent.com/drake69/spendify/main/packaging/macos/install.sh | bash',
+    deb:  'curl -fsSL https://raw.githubusercontent.com/drake69/spendify/main/packaging/linux/install-debian.sh | bash',
+    rhel: 'curl -fsSL https://raw.githubusercontent.com/drake69/spendify/main/packaging/linux/install-redhat.sh | bash',
+    win:  'irm https://raw.githubusercontent.com/drake69/spendify/main/packaging/windows/install.ps1 | iex'
   };
   function copyCode(btn, os) {
     navigator.clipboard.writeText(installCmds[os] || installCmds.mac).then(() => {
