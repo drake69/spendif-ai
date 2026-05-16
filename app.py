@@ -17,8 +17,15 @@ Pages:
   💬 Chat              – adaptive support chatbot (RAG cloud/local or FAQ match)
 """
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
+# Bundled installs (Linux .deb/.rpm) ship the app under /opt/spendifai which is
+# read-only — the launcher writes the user-specific .env to ~/.spendifai/.env.
+# Load that first; load_dotenv() does NOT override existing env vars, so the
+# desktop launcher's os.environ wins and a cwd-local .env (dev mode) acts as a
+# fallback for keys neither parent set.
+load_dotenv(Path.home() / ".spendifai" / ".env")
 load_dotenv()
 
 import streamlit as st

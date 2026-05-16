@@ -7,22 +7,28 @@
 #
 #  DESIGN CHOICES:
 #
-#  • Same "repo + post-install" approach as the .deb builder.
-#    The RPM ships source code to /opt/spendifai, then %post runs
-#    `uv sync` to create the venv and downloads the AI model.
+#  • Same "repo + launch.sh" approach as the .deb builder. The RPM ships
+#    source code to /opt/spendifai (read-only) plus packaging/linux/launch.sh
+#    as /opt/spendifai/launch.sh. The .desktop file points Exec= at that
+#    wrapper. First user launch creates ~/.spendifai/.venv via `uv sync`
+#    against the system Python (PyGObject + cairo via --system-site-packages).
+#    %post does NOT touch user state — it only installs uv to /usr/local/bin
+#    and refreshes icon/desktop caches.
 #
 #  • WHY rpmbuild (not fpm)?
 #    rpmbuild is the native RPM build tool, pre-installed on all Red Hat
 #    systems. fpm is convenient but adds a Ruby dependency. We use rpmbuild
-#    with a minimal .spec generated inline — no need for a persistent
-#    ~/rpmbuild tree.
+#    with a minimal .spec generated inline.
+#
+#  • Fedora package names: python3-gobject (not python3-gi), python3-cairo,
+#    webkit2gtk4.1 (Fedora ≥ 37), zenity, gtk3.
 #
 #  USAGE:
 #    cd sw_artifacts
-#    bash packaging/linux/build-rpm.sh [--version X.Y.Z]
+#    bash packaging/linux/build-rpm.sh [--version X.Y.Z] [--arch x86_64|aarch64]
 #
 #  PREREQUISITES:
-#    rpm-build (sudo dnf install rpm-build)
+#    rpm-build (sudo dnf install rpm-build, or sudo apt install rpm)
 # =============================================================================
 
 set -euo pipefail
@@ -76,7 +82,7 @@ TARBALL_DIR="${BUILD_DIR}/${TARBALL_NAME}"
 rm -rf "${TARBALL_DIR}"
 mkdir -p "${TARBALL_DIR}"
 
-# Copy application directories
+# Application directories
 APP_DIRS=(api config core db desktop nsi prompts reports services support ui)
 for d in "${APP_DIRS[@]}"; do
   [[ -d "${REPO_ROOT}/${d}" ]] && cp -r "${REPO_ROOT}/${d}" "${TARBALL_DIR}/${d}"
@@ -88,11 +94,14 @@ for f in app.py pyproject.toml VERSION .env.example; do
 done
 [[ -f "${REPO_ROOT}/uv.lock" ]] && cp "${REPO_ROOT}/uv.lock" "${TARBALL_DIR}/uv.lock"
 
+# Single source of truth for the user-space launcher (shared with .deb)
+cp "${SCRIPT_DIR}/launch.sh" "${TARBALL_DIR}/launch.sh"
+chmod 0755 "${TARBALL_DIR}/launch.sh"
+
 # Icon — record whether we are shipping one so the spec %files section
 # can list (or omit) the icon path. rpmbuild requires every %files entry
 # to exist on disk; an unconditional icon line is a hard build failure
-# when the source PNG is missing (which is the case on a fresh CI run
-# where create_icon.py produces a .icns but no 256.png).
+# when the source PNG is missing (closes AI-56).
 ICON_SRC="${REPO_ROOT}/packaging/macos/spendifai_256.png"
 ICON_PRESENT=0
 if [[ -f "$ICON_SRC" ]]; then
@@ -119,15 +128,21 @@ License:        MIT
 URL:            https://github.com/drake69/spendify
 Source0:        %{name}-%{version}.tar.gz
 
-# Runtime dependencies available in Fedora/RHEL repos
-Requires:       python3 >= 3.11
+# Runtime dependencies (Fedora ≥ 37 / RHEL 9 names)
+Requires:       python3 >= 3.12
 Requires:       python3-devel
 Requires:       python3-gobject
+Requires:       python3-cairo
 Requires:       webkit2gtk4.1
+Requires:       gtk3
+Requires:       zenity
 Requires:       git
 Requires:       curl
 Requires:       gcc
+Requires:       gcc-c++
+Requires:       make
 Requires:       cmake
+Requires:       pkgconfig
 
 # Build is just unpacking — no compilation needed
 BuildArch:      noarch
@@ -138,6 +153,11 @@ chronological ledger with automatic categorisation via local LLM (llama.cpp).
 Features include card-account reconciliation, internal transfer detection,
 budget tracking, and interactive analytics. Runs fully offline.
 
+The package ships source code to /opt/spendifai. On first user launch the
+included launch.sh wrapper creates a per-user venv in ~/.spendifai/.venv
+(using the system Python with --system-site-packages so PyGObject and cairo
+are available) and runs uv sync against the shipped uv.lock.
+
 %prep
 %setup -q
 
@@ -145,14 +165,18 @@ budget tracking, and interactive analytics. Runs fully offline.
 mkdir -p %{buildroot}/opt/spendifai
 cp -r * %{buildroot}/opt/spendifai/
 
-# .desktop file
+# launch.sh must remain executable through the install
+chmod 0755 %{buildroot}/opt/spendifai/launch.sh
+
+# .desktop file — Exec points at launch.sh, the per-user wrapper. Runs as
+# the logged-in user (gnome-shell/kde-plasma spawn it), not root.
 mkdir -p %{buildroot}/usr/share/applications
 cat > %{buildroot}/usr/share/applications/spendifai.desktop <<'DESKTOP'
 [Desktop Entry]
 Type=Application
 Name=Spendif.ai
 Comment=Personal finance manager with local AI categorisation
-Exec=bash -c 'export PATH="\$HOME/.local/bin:\$PATH" && cd /opt/spendifai && uv run python -m desktop.launcher'
+Exec=/opt/spendifai/launch.sh
 Icon=spendifai
 Terminal=false
 Categories=Office;Finance;
@@ -168,87 +192,51 @@ if [ -f spendifai.png ]; then
 fi
 
 %post
-# Post-install: create venv, download model, configure llama.cpp
-# Runs as the installing user (or root if sudo — model download uses \$HOME)
-
-INSTALL_DIR="/opt/spendifai"
-SPENDIFAI_HOME="\$HOME/.spendifai"
-ENV_FILE="\$INSTALL_DIR/.env"
+# Post-install runs as ROOT with \$HOME=/root. Anything user-specific (venv,
+# model download, ~/.spendifai/.env) belongs in launch.sh, which runs at
+# first user launch. Here we only install uv system-wide and refresh caches.
 
 echo ""
-echo "  Spendif.ai — post-install setup"
+echo "  Spendif.ai — post-install"
 echo ""
 
-# 1. Install uv
-export PATH="\$HOME/.local/bin:\$PATH"
-if ! command -v uv &>/dev/null; then
-  echo "  ▸ Installing uv..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="\$HOME/.local/bin:\$PATH"
-fi
-
-# 2. Python dependencies
-echo "  ▸ Installing Python dependencies..."
-cd "\$INSTALL_DIR"
-
-# Detect GPU
-if command -v nvidia-smi &>/dev/null; then
-  export CMAKE_ARGS="-DGGML_CUDA=on"
-  export FORCE_CMAKE=1
-elif command -v rocm-smi &>/dev/null; then
-  export CMAKE_ARGS="-DGGML_HIPBLAS=on"
-  export FORCE_CMAKE=1
-fi
-
-uv sync --extra desktop --quiet 2>&1 | tail -3 || {
-  unset CMAKE_ARGS FORCE_CMAKE
-  uv sync --extra desktop --quiet
-}
-echo "  ✔ Python environment ready"
-
-# 3. Data directory
-mkdir -p "\$SPENDIFAI_HOME/models"
-echo "\$INSTALL_DIR" > "\$SPENDIFAI_HOME/install_path.txt"
-
-# 4. .env
-if [ ! -f "\$ENV_FILE" ]; then
-  cat > "\$ENV_FILE" <<EOF
-SPENDIFAI_DB=sqlite:///\$SPENDIFAI_HOME/spendifai.db
-LLM_BACKEND=local_llama_cpp
-EOF
-fi
-
-# 5. Download AI model
-echo "  ▸ Downloading AI model..."
-MODEL_PATH=\$(cd "\$INSTALL_DIR" && uv run python -c "
-import sys, os
-sys.path.insert(0, '.')
-from core.model_manager import ensure_model_available
-path = ensure_model_available(progress_callback=lambda pct, msg: print(f'    {pct:.0%%}  {msg}', flush=True))
-print(path or '')
-" 2>&1 | tail -1)
-
-if [ -n "\$MODEL_PATH" ] && [ "\$MODEL_PATH" != "None" ]; then
-  echo "  ✔ AI model: \$(basename "\$MODEL_PATH")"
-  if grep -q "^LLAMA_CPP_MODEL_PATH=" "\$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^LLAMA_CPP_MODEL_PATH=.*|LLAMA_CPP_MODEL_PATH=\$MODEL_PATH|" "\$ENV_FILE"
-  else
-    echo "LLAMA_CPP_MODEL_PATH=\$MODEL_PATH" >> "\$ENV_FILE"
+# ── System-wide uv install ──────────────────────────────────────────────────
+# Place uv in /usr/local/bin so EVERY user (not just root) has it on PATH.
+if ! [ -x /usr/local/bin/uv ]; then
+  echo "  ▸ Installing uv to /usr/local/bin..."
+  TMP_UV_DIR=\$(mktemp -d)
+  curl -LsSf https://astral.sh/uv/install.sh | \\
+    env XDG_CONFIG_HOME=/tmp UV_INSTALL_DIR=/usr/local/bin sh -s -- --no-modify-path 2>&1 | tail -3
+  # Fallback if UV_INSTALL_DIR was ignored by an older bootstrap script:
+  if ! [ -x /usr/local/bin/uv ] && [ -x /root/.local/bin/uv ]; then
+    cp /root/.local/bin/uv /usr/local/bin/uv
+    chmod 0755 /usr/local/bin/uv
   fi
+  rm -rf "\$TMP_UV_DIR"
+fi
+if [ -x /usr/local/bin/uv ]; then
+  echo "  ✔ uv: \$(/usr/local/bin/uv --version 2>&1 | head -1)"
+else
+  echo "  ⚠ uv install failed — launch.sh will retry per-user on first launch."
 fi
 
-# 6. Update caches
+# ── Refresh icon + desktop caches ───────────────────────────────────────────
 gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
 update-desktop-database /usr/share/applications 2>/dev/null || true
 
 echo ""
-echo "  ✔ Spendif.ai ready! Search 'Spendif' in Activities to launch."
+echo "  ✔ Spendif.ai installed."
+echo "    On first launch the app will create a per-user Python venv in"
+echo "    ~/.spendifai/.venv and download the recommended AI model (~1-3 GB)."
+echo "    Launch: search 'Spendif' in Activities, or run /opt/spendifai/launch.sh"
 echo ""
 
 %preun
-# Clean up venv on uninstall
+# Per-user venv lives in ~/.spendifai/.venv (created by launch.sh). Only
+# clean up legacy ≤0.1.0 layouts that stored the venv under /opt.
 rm -rf /opt/spendifai/.venv 2>/dev/null || true
-echo "  Spendif.ai removed. User data preserved in ~/.spendifai/"
+echo "  Spendif.ai removed. Per-user data preserved in ~/.spendifai/."
+echo "  Wipe with: bash /opt/spendifai/cleanup.sh  (if available)  OR  rm -rf ~/.spendifai"
 
 %files
 %defattr(-,root,root,-)
@@ -258,15 +246,22 @@ $([ "$ICON_PRESENT" = "1" ] && echo "/usr/share/icons/hicolor/256x256/apps/spend
 
 %changelog
 * $(date '+%a %b %d %Y') Luigi Corsaro <lcorsaro69@gmail.com> - ${VERSION}-${RELEASE}
-- Desktop native launcher (pywebview + embedded Streamlit)
-- Auto-download AI model on first install
-- Zero-config llama.cpp setup
+- Use shared launch.sh wrapper for per-user venv setup (same as .deb)
+- %post no longer runs uv sync or downloads model — moved to first launch
+- Add zenity / python3-cairo / webkit2gtk4.1 / gtk3 deps for pywebview GTK
 SPEC
 
 # ── Build RPM ────────────────────────────────────────────────────────────────
+# Cross-build awareness: when invoked on macOS via Homebrew's rpm,
+# rpmbuild stamps Os: darwin in the package header. Fedora's dnf then
+# refuses with "intended for a different operating system". Force the
+# target OS to linux. On native Linux this is a no-op.
 echo "▸ Running rpmbuild..."
 rpmbuild \
+  --target "noarch-linux" \
   --define "_topdir ${RPM_TOPDIR}" \
+  --define "_target_os linux" \
+  --define "_host_os linux" \
   -bb "${RPM_TOPDIR}/SPECS/spendifai.spec"
 
 # ── Move output ──────────────────────────────────────────────────────────────

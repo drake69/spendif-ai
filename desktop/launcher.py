@@ -188,28 +188,45 @@ _MODEL_STATUS_FILE = _SPENDIFAI_HOME / "model_download.status"
 
 
 def _bootstrap_env(app_dir: Path) -> None:
-    """Synchronous bootstrap — fast. Makes Streamlit startable immediately."""
+    """Synchronous bootstrap — fast. Makes Streamlit startable immediately.
+
+    The .env is written to ``~/.spendifai/.env`` (user-writable on every OS);
+    on the Linux .deb / .rpm bundle ``app_dir`` is ``/opt/spendifai`` which is
+    read-only. We also seed ``os.environ`` directly so the Streamlit
+    subprocess inherits the values without needing to find the .env file.
+    """
     _SPENDIFAI_HOME.mkdir(parents=True, exist_ok=True)
     app_str = str(app_dir)
     if app_str not in sys.path:
         sys.path.insert(0, app_str)
 
-    env_file = app_dir / ".env"
-    env_lines: list[str] = []
-    if env_file.exists():
-        env_lines = env_file.read_text(encoding="utf-8").splitlines()
+    defaults = {
+        "LLM_BACKEND": "local_llama_cpp",
+        "SPENDIFAI_DB": f"sqlite:///{_SPENDIFAI_HOME / 'ledger.db'}",
+    }
+    for key, value in defaults.items():
+        os.environ.setdefault(key, value)
 
-    def _set_env(key: str, value: str) -> None:
-        for i, line in enumerate(env_lines):
-            if line.strip().startswith(f"{key}="):
-                env_lines[i] = f"{key}={value}"
-                return
-        env_lines.append(f"{key}={value}")
+    env_file = _SPENDIFAI_HOME / ".env"
+    try:
+        env_lines: list[str] = (
+            env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+        )
 
-    _set_env("LLM_BACKEND", "local_llama_cpp")
-    _set_env("SPENDIFAI_DB", f"sqlite:///{_SPENDIFAI_HOME / 'ledger.db'}")
-    env_file.write_text("\n".join(env_lines) + "\n", encoding="utf-8")
-    print(f"_bootstrap_env: wrote .env at {env_file}", flush=True)
+        def _set_env(key: str, value: str) -> None:
+            for i, line in enumerate(env_lines):
+                if line.strip().startswith(f"{key}="):
+                    env_lines[i] = f"{key}={value}"
+                    return
+            env_lines.append(f"{key}={value}")
+
+        for key, value in defaults.items():
+            _set_env(key, value)
+        env_file.write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+        print(f"_bootstrap_env: wrote .env at {env_file}", flush=True)
+    except OSError as exc:
+        # Non-fatal: os.environ has already been seeded above.
+        print(f"_bootstrap_env: could not persist .env ({exc}) — env vars set in-process", flush=True)
 
 
 def _write_status(payload: dict) -> None:
@@ -266,19 +283,25 @@ def _download_model_bg(app_dir: Path) -> None:
             print("_download_model_bg: ensure_model_available returned None", flush=True)
             return
 
-        # Update .env with model path so the next launch (and current Streamlit
-        # if it reloads its .env) sees it.
-        env_file = app_dir / ".env"
-        lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
-        replaced = False
-        for i, line in enumerate(lines):
-            if line.strip().startswith("LLAMA_CPP_MODEL_PATH="):
-                lines[i] = f"LLAMA_CPP_MODEL_PATH={model_path}"
-                replaced = True
-                break
-        if not replaced:
-            lines.append(f"LLAMA_CPP_MODEL_PATH={model_path}")
-        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # Update os.environ (so the running Streamlit subprocess sees it) and
+        # persist into ~/.spendifai/.env (user-writable on every OS). On the
+        # Linux .deb / .rpm bundle ``app_dir`` is ``/opt/spendifai`` which is
+        # read-only, so we never write there.
+        os.environ["LLAMA_CPP_MODEL_PATH"] = model_path
+        env_file = _SPENDIFAI_HOME / ".env"
+        try:
+            lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+            replaced = False
+            for i, line in enumerate(lines):
+                if line.strip().startswith("LLAMA_CPP_MODEL_PATH="):
+                    lines[i] = f"LLAMA_CPP_MODEL_PATH={model_path}"
+                    replaced = True
+                    break
+            if not replaced:
+                lines.append(f"LLAMA_CPP_MODEL_PATH={model_path}")
+            env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"_download_model_bg: could not persist LLAMA_CPP_MODEL_PATH to .env ({exc})", flush=True)
 
         _write_status({
             "pct": 1.0,
@@ -478,7 +501,7 @@ def main() -> None:
                     "<html><body style='font-family:sans-serif;padding:2em'>"
                     "<h2>Startup failed</h2>"
                     "<p>Streamlit did not respond within 30 seconds.</p>"
-                    "<p>See ~/Library/Logs/spendifai-launcher.log for details.</p>"
+                    f"<p>See <code>{_LOG_FILE}</code> for details.</p>"
                     "</body></html>"
                 )
         except Exception:
@@ -489,7 +512,7 @@ def main() -> None:
                     "<html><body style='font-family:sans-serif;padding:2em'>"
                     "<h2>Startup error</h2>"
                     "<p>An exception occurred during setup.</p>"
-                    "<p>See <code>~/Library/Logs/spendifai-launcher.log</code> for the full trace.</p>"
+                    f"<p>See <code>{_LOG_FILE}</code> for the full trace.</p>"
                     "</body></html>"
                 )
             except Exception:

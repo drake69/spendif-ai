@@ -25,12 +25,21 @@ banner renders nothing.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import streamlit as st
 
 
 _STATUS_FILE = Path.home() / ".spendifai" / "model_download.status"
+# Mirror desktop/launcher.py's _LOG_FILE so the user-facing hint points to the
+# right place on every OS (macOS keeps Apple's convention, others use the dot
+# directory under $HOME).
+_LAUNCHER_LOG_PATH = (
+    "~/Library/Logs/spendifai-launcher.log"
+    if sys.platform == "darwin"
+    else "~/.spendifai/spendifai-launcher.log"
+)
 
 
 def _load_status() -> dict | None:
@@ -74,7 +83,7 @@ def render_model_download_banner() -> None:
             f"⚠ Download del modello AI fallito: `{error}`. "
             "L'app funziona ma le funzioni AI sono disabilitate finché il "
             "modello non viene scaricato. Riprova chiudendo e riaprendo l'app, "
-            "o consulta `~/Library/Logs/spendifai-launcher.log`."
+            f"o consulta `{_LAUNCHER_LOG_PATH}`."
         )
         return
 

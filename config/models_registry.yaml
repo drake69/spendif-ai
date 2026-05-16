@@ -63,7 +63,7 @@ models:
 # The loader picks the entry whose key is <= detected RAM.
 # Keys must be sorted ascending.
 default_tier_map:
-  4: qwen2.5-1.5b
+  2: qwen2.5-1.5b
   8: qwen2.5-3b
   12: qwen2.5-7b
   16: gemma-3-12b

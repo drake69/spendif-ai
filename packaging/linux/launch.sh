@@ -63,10 +63,20 @@ fi
 echo "uv: $UV"
 
 # ── 2. Sync user venv (idempotent — fast if already aligned) ────────────────
+# We use a marker file (.venv/.spendifai_ready) to detect "first time setup is
+# needed". The marker is created ONLY after a successful uv sync. If the venv
+# directory exists but the marker doesn't (e.g. previous launch crashed during
+# the long llama-cpp-python build), we still treat this as a first launch so
+# the user gets the zenity progress dialog instead of staring at a spinner.
+READY_MARKER="$VENV_DIR/.spendifai_ready"
 IS_FIRST_LAUNCH=false
-if [ ! -d "$VENV_DIR" ]; then
+if [ ! -f "$READY_MARKER" ] || [ ! -x "$VENV_DIR/bin/python" ]; then
   IS_FIRST_LAUNCH=true
-  echo "First launch — creating $VENV_DIR"
+  if [ -d "$VENV_DIR" ]; then
+    echo "Venv exists but setup never completed — treating as first launch"
+  else
+    echo "First launch — creating $VENV_DIR"
+  fi
   echo "This compiles llama-cpp-python natively (3-8 min on arm64; faster on amd64)."
 
   # Create the venv with SYSTEM site-packages exposed. This lets pywebview
@@ -74,9 +84,11 @@ if [ ! -d "$VENV_DIR" ]; then
   # ABI-matched to the system libgirepository / libcairo, no pip compile.
   # Use the system Python to keep ABI compatibility with system extension
   # modules (.so files).
-  SYSTEM_PYTHON="$(command -v python3 || echo /usr/bin/python3)"
-  echo "Using system Python: $SYSTEM_PYTHON ($($SYSTEM_PYTHON --version 2>&1))"
-  "$UV" venv --python "$SYSTEM_PYTHON" --system-site-packages "$VENV_DIR"
+  if [ ! -d "$VENV_DIR" ]; then
+    SYSTEM_PYTHON="$(command -v python3 || echo /usr/bin/python3)"
+    echo "Using system Python: $SYSTEM_PYTHON ($($SYSTEM_PYTHON --version 2>&1))"
+    "$UV" venv --python "$SYSTEM_PYTHON" --system-site-packages "$VENV_DIR"
+  fi
 fi
 
 # Detect NVIDIA GPU (best-effort)
@@ -128,6 +140,9 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
   fi
   exit 1
 fi
+# Mark the venv as ready so subsequent launches skip the slow first-launch
+# code path AND, equally important, skip the zenity progress dialog.
+touch "$READY_MARKER"
 echo "venv ready: $VENV_DIR"
 
 # ── 3. Seed .env if missing (writable in USER_HOME, not in /opt) ────────────
