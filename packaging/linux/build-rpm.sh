@@ -88,9 +88,17 @@ for f in app.py pyproject.toml VERSION .env.example; do
 done
 [[ -f "${REPO_ROOT}/uv.lock" ]] && cp "${REPO_ROOT}/uv.lock" "${TARBALL_DIR}/uv.lock"
 
-# Icon
+# Icon — record whether we are shipping one so the spec %files section
+# can list (or omit) the icon path. rpmbuild requires every %files entry
+# to exist on disk; an unconditional icon line is a hard build failure
+# when the source PNG is missing (which is the case on a fresh CI run
+# where create_icon.py produces a .icns but no 256.png).
 ICON_SRC="${REPO_ROOT}/packaging/macos/spendifai_256.png"
-[[ -f "$ICON_SRC" ]] && cp "$ICON_SRC" "${TARBALL_DIR}/spendifai.png"
+ICON_PRESENT=0
+if [[ -f "$ICON_SRC" ]]; then
+  cp "$ICON_SRC" "${TARBALL_DIR}/spendifai.png"
+  ICON_PRESENT=1
+fi
 
 # Clean
 find "${TARBALL_DIR}" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -246,7 +254,7 @@ echo "  Spendif.ai removed. User data preserved in ~/.spendifai/"
 %defattr(-,root,root,-)
 /opt/spendifai/
 /usr/share/applications/spendifai.desktop
-/usr/share/icons/hicolor/256x256/apps/spendifai.png
+$([ "$ICON_PRESENT" = "1" ] && echo "/usr/share/icons/hicolor/256x256/apps/spendifai.png")
 
 %changelog
 * $(date '+%a %b %d %Y') Luigi Corsaro <lcorsaro69@gmail.com> - ${VERSION}-${RELEASE}
