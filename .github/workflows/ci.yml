@@ -46,7 +46,7 @@ jobs:
           ANTHROPIC_API_KEY: "test-key-ci"
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
@@ -132,7 +132,7 @@ jobs:
         # continue-on-error: false  ← default, esplicito per chiarezza
 
       - name: Upload coupling report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coupling-report
@@ -281,7 +281,7 @@ jobs:
           # Note: quarantine/ excluded — archived/dead code, not shipped
 
       - name: Upload Bandit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bandit-report
@@ -308,7 +308,7 @@ jobs:
           echo "Semgrep findings: $TOTAL (audit mode — not blocking)"
 
       - name: Upload Semgrep report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: semgrep-report
@@ -333,7 +333,7 @@ jobs:
             --ignore-vuln CVE-2025-69872
 
       - name: Upload pip-audit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pip-audit-report
