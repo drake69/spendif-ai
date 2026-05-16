@@ -20,7 +20,13 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
-from config import ModelInfo, get_recommended_model
+from config import ModelInfo, get_fallback_chain, get_recommended_model
+
+
+def _build_fallback_chain(effective_gb: int) -> list[ModelInfo]:
+    """Local wrapper around ``config.get_fallback_chain`` so unit tests can
+    monkey-patch it without touching the global registry loader."""
+    return get_fallback_chain(effective_gb)
 from support.logging import setup_logging
 
 logger = setup_logging()
@@ -252,8 +258,14 @@ def ensure_model_available(
     # vram_gb == 0 means CPU-only: use RAM as the constraint.
     effective_gb = min(ram_gb, vram_gb) if vram_gb > 0 else ram_gb
 
-    recommended = get_recommended_model(effective_gb)
-    if recommended is None:
+    # Try the recommended model first; on failure (404, 401, network, …)
+    # fall back to the next-smaller tier and retry, down to the smallest
+    # model in the registry. This makes the bundle resilient against a
+    # single HF repo going gated/private (AI-59 was exactly this: the
+    # 16 GB tier pointed at the gated google/gemma-3-12b-it-GGUF and the
+    # entire AI feature was disabled until we shipped a registry fix).
+    fallback_chain = _build_fallback_chain(effective_gb)
+    if not fallback_chain:
         logger.error(
             "ensure_model_available: no model found in registry for "
             "effective=%d GB (RAM=%d, VRAM=%d)", effective_gb, ram_gb, vram_gb,
@@ -261,38 +273,47 @@ def ensure_model_available(
         _progress(1.0, "Nessun modello compatibile trovato")
         return None
 
-    _progress(0.10, f"Consigliato: {recommended.name} ({recommended.size_mb} MB)")
-    logger.info(
-        f"ensure_model_available: RAM={ram_gb} GB, VRAM={vram_gb} GB, "
-        f"effective={effective_gb} GB → {recommended.id} "
-        f"({recommended.size_mb} MB, tier={recommended.tier})"
-    )
-
-    # 3. Download via huggingface_hub
-    dest_path = MODELS_DIR / recommended.filename
-    try:
-        _progress(0.15, f"Download {recommended.name}...")
-        _download_from_hf(
-            repo=recommended.repo,
-            filename=recommended.filename,
-            dest=dest_path,
-            progress_callback=lambda pct: _progress(0.15 + pct * 0.80, f"Download: {pct:.0%}"),
-        )
-        _progress(0.95, "Download completato, verifica...")
-
-        if dest_path.exists() and dest_path.stat().st_size > 100_000:
-            logger.info(f"ensure_model_available: downloaded {dest_path} ({dest_path.stat().st_size:,} bytes)")
-            _progress(1.0, f"Pronto: {recommended.name}")
-            return str(dest_path)
+    last_exc: Exception | None = None
+    for attempt_idx, candidate in enumerate(fallback_chain):
+        if attempt_idx == 0:
+            _progress(0.10, f"Consigliato: {candidate.name} ({candidate.size_mb} MB)")
+            logger.info(
+                f"ensure_model_available: RAM={ram_gb} GB, VRAM={vram_gb} GB, "
+                f"effective={effective_gb} GB → {candidate.id} "
+                f"({candidate.size_mb} MB, tier={candidate.tier})"
+            )
         else:
-            logger.error(f"ensure_model_available: download incomplete — {dest_path}")
-            _progress(1.0, "Download incompleto")
-            return None
+            logger.warning(
+                "ensure_model_available: falling back to %s (%s MB, tier=%s) "
+                "after previous candidate failed", candidate.id, candidate.size_mb, candidate.tier,
+            )
+            _progress(0.10, f"Ripiego: {candidate.name} ({candidate.size_mb} MB)")
 
-    except Exception as exc:
-        logger.error(f"ensure_model_available: download failed — {exc}")
-        _progress(1.0, f"Download fallito: {exc}")
-        return None
+        dest_path = MODELS_DIR / candidate.filename
+        try:
+            _progress(0.15, f"Download {candidate.name}...")
+            _download_from_hf(
+                repo=candidate.repo,
+                filename=candidate.filename,
+                dest=dest_path,
+                progress_callback=lambda pct: _progress(0.15 + pct * 0.80, f"Download: {pct:.0%}"),
+            )
+            _progress(0.95, "Download completato, verifica...")
+
+            if dest_path.exists() and dest_path.stat().st_size > 100_000:
+                logger.info(f"ensure_model_available: downloaded {dest_path} ({dest_path.stat().st_size:,} bytes)")
+                _progress(1.0, f"Pronto: {candidate.name}")
+                return str(dest_path)
+            logger.error(f"ensure_model_available: download incomplete — {dest_path}, trying fallback")
+        except Exception as exc:
+            last_exc = exc
+            logger.error(f"ensure_model_available: download failed for {candidate.id} — {exc}")
+            # try the next fallback
+
+    # Exhausted every fallback
+    logger.error("ensure_model_available: all fallbacks exhausted, last error=%s", last_exc)
+    _progress(1.0, f"Download fallito anche con tutti i fallback: {last_exc}")
+    return None
 
 
 def _make_callback_tqdm(tqdm_base, progress_callback):

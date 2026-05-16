@@ -182,6 +182,29 @@ def test_make_callback_tqdm_swallows_callback_exceptions():
     assert bar.update(3) == "underlying-return"
 
 
+def test_fallback_chain_includes_smaller_tiers_in_order():
+    """The fallback chain is largest-tier-first; if a download fails we
+    walk down to ever-smaller models instead of giving up (AI-59 root
+    cause was: 16 GB tier pointed at a gated repo and the whole feature
+    was disabled even though smaller working models exist)."""
+    from config import get_fallback_chain
+    chain = get_fallback_chain(64)
+    ids = [m.id for m in chain]
+    # On a 64 GB host every tier ≤ 64 must appear, ordered from largest.
+    # The registry currently has 2/8/12/16 tiers, so chain length is 4.
+    assert ids[0] == "gemma-3-12b"          # the recommended pick
+    assert ids[-1] == "qwen2.5-1.5b"        # smallest fallback
+    assert len(ids) >= 2                     # at least one fallback exists
+    # Strictly decreasing model sizes
+    sizes = [m.size_mb for m in chain]
+    assert sizes == sorted(sizes, reverse=True)
+
+
+def test_fallback_chain_empty_when_no_model_fits():
+    from config import get_fallback_chain
+    assert get_fallback_chain(1) == []      # below the lowest tier (2 GB)
+
+
 def test_make_callback_tqdm_handles_zero_total():
     """When total is unknown (None) the callback is never fired — no ZeroDivisionError."""
     progress: list[float] = []
