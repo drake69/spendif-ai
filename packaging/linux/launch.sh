@@ -1,0 +1,140 @@
+#!/bin/bash
+# =============================================================================
+#  Spendif.ai — user-space launcher for the Linux .deb / .rpm bundle.
+#
+#  Runs as the USER (gnome-shell / kde-plasma spawn it from the .desktop
+#  Exec= line, not as root). The system package (.deb/.rpm) shipped this
+#  file to /opt/spendifai/launch.sh and the .desktop file points at it.
+#
+#  Phases:
+#    1. Locate `uv` (system install in /usr/local/bin, else user fallback).
+#    2. On first launch (or after a package upgrade): run `uv sync` against
+#       the user-owned ~/.spendifai/.venv with the project's pyproject.toml.
+#       Shows a zenity --progress --pulsate dialog while uv is working so
+#       the user gets visible feedback instead of staring at a still icon.
+#    3. Seed ~/.spendifai/.env if missing.
+#    4. Exec the pywebview launcher inside the venv's Python.
+#
+#  All console output goes through tee into ~/.spendifai/launch.log so
+#  debugging a desktop-spawned run is possible after the fact.
+# =============================================================================
+set -eo pipefail        # pipefail so `... | tail` does not swallow uv errors
+
+APP_DIR="/opt/spendifai"
+USER_HOME_DIR="$HOME/.spendifai"
+VENV_DIR="$USER_HOME_DIR/.venv"
+LOG_FILE="$USER_HOME_DIR/launch.log"
+
+mkdir -p "$USER_HOME_DIR"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== launch.sh $(date -Iseconds) ==="
+
+# ── Zenity helper ───────────────────────────────────────────────────────────
+# Shows a GTK pulsate dialog with the given message while the next command
+# runs. Falls back to a silent run when zenity is missing (CI smoke tests).
+_with_progress() {
+  local title="$1"
+  local text="$2"
+  shift 2
+  if command -v zenity &>/dev/null; then
+    zenity --progress --pulsate --auto-close --auto-kill --no-cancel \
+           --title="$title" --text="$text" --width=480 </dev/null &
+    local zen_pid=$!
+    local rc=0
+    "$@" || rc=$?
+    kill "$zen_pid" 2>/dev/null || true
+    wait "$zen_pid" 2>/dev/null || true
+    return $rc
+  else
+    "$@"
+  fi
+}
+
+# ── 1. Find uv ──────────────────────────────────────────────────────────────
+UV=""
+for candidate in /usr/local/bin/uv "$HOME/.local/bin/uv" /usr/bin/uv; do
+  if [ -x "$candidate" ]; then UV="$candidate"; break; fi
+done
+if [ -z "$UV" ]; then
+  echo "uv not found — installing in user home (postinst should have placed it system-wide)"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  UV="$HOME/.local/bin/uv"
+fi
+echo "uv: $UV"
+
+# ── 2. Sync user venv (idempotent — fast if already aligned) ────────────────
+IS_FIRST_LAUNCH=false
+if [ ! -d "$VENV_DIR" ]; then
+  IS_FIRST_LAUNCH=true
+  echo "First launch — creating $VENV_DIR"
+  echo "This compiles llama-cpp-python natively (3-8 min on arm64; faster on amd64)."
+
+  # Create the venv with SYSTEM site-packages exposed. This lets pywebview
+  # find `gi` (python3-gi) and `cairo` (python3-cairo) — system-managed,
+  # ABI-matched to the system libgirepository / libcairo, no pip compile.
+  # Use the system Python to keep ABI compatibility with system extension
+  # modules (.so files).
+  SYSTEM_PYTHON="$(command -v python3 || echo /usr/bin/python3)"
+  echo "Using system Python: $SYSTEM_PYTHON ($($SYSTEM_PYTHON --version 2>&1))"
+  "$UV" venv --python "$SYSTEM_PYTHON" --system-site-packages "$VENV_DIR"
+fi
+
+# Detect NVIDIA GPU (best-effort)
+if command -v nvidia-smi &>/dev/null; then
+  export CMAKE_ARGS="-DGGML_CUDA=on"
+  export FORCE_CMAKE=1
+fi
+
+cd "$APP_DIR"
+
+# Always point uv at the per-user venv (uv defaults to .venv inside the
+# project dir, which is /opt — read-only). Exported BEFORE _with_progress
+# so the subprocess inherits it.
+export UV_PROJECT_ENVIRONMENT="$VENV_DIR"
+
+# Pulsate dialog only on first launch — afterwards uv sync is sub-second.
+if $IS_FIRST_LAUNCH; then
+  _with_progress \
+    "Spendif.ai — Primo avvio" \
+    "Sto preparando l'ambiente AI (3–8 min).\nQuesta è una sola volta.\nNon chiudere questa finestra." \
+    "$UV" sync --extra desktop || {
+      echo "uv sync failed, retrying CPU-only..."
+      unset CMAKE_ARGS FORCE_CMAKE
+      rm -rf "$VENV_DIR"
+      _with_progress \
+        "Spendif.ai — Primo avvio" \
+        "Compilazione GPU fallita, riprovo CPU-only (qualche minuto in più)." \
+        "$UV" sync --extra desktop
+    }
+else
+  "$UV" sync --extra desktop || {
+    echo "uv sync failed, retrying CPU-only..."
+    unset CMAKE_ARGS FORCE_CMAKE
+    "$UV" sync --extra desktop
+  }
+fi
+
+if [ ! -x "$VENV_DIR/bin/python" ]; then
+  echo "FATAL: venv exists but $VENV_DIR/bin/python is missing."
+  echo "Inspect ~/.spendifai/launch.log, then:"
+  echo "  rm -rf $VENV_DIR && /opt/spendifai/launch.sh"
+  if command -v zenity &>/dev/null; then
+    zenity --error --title="Spendif.ai" --width=480 \
+      --text="Setup non completato. Vedi ~/.spendifai/launch.log e riprova:\nrm -rf ~/.spendifai/.venv && /opt/spendifai/launch.sh"
+  fi
+  exit 1
+fi
+echo "venv ready: $VENV_DIR"
+
+# ── 3. Seed .env if missing (writable in USER_HOME, not in /opt) ────────────
+ENV_FILE="$USER_HOME_DIR/.env"
+if [ ! -f "$ENV_FILE" ]; then
+  cat > "$ENV_FILE" <<EOF
+SPENDIFAI_DB=sqlite:///$USER_HOME_DIR/ledger.db
+LLM_BACKEND=local_llama_cpp
+EOF
+fi
+
+# ── 4. Launch the pywebview app ─────────────────────────────────────────────
+cd "$APP_DIR"
+exec "$VENV_DIR/bin/python" -m desktop.launcher

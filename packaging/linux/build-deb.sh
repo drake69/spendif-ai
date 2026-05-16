@@ -118,7 +118,7 @@ Version: ${VERSION}
 Section: finance
 Priority: optional
 Architecture: ${ARCH}
-Depends: python3 (>= 3.11), python3-venv, python3-dev, python3-gi, gir1.2-webkit2-4.1, git, curl, gcc, cmake, pkg-config
+Depends: python3 (>= 3.12), python3-venv, python3-dev, python3-gi, python3-cairo, gir1.2-webkit2-4.1, git, curl, gcc, cmake, pkg-config, zenity
 Installed-Size: $(du -sk "${INSTALL_ROOT}" | cut -f1)
 Maintainer: Luigi Corsaro <lcorsaro69@gmail.com>
 Homepage: https://github.com/drake69/spendify
@@ -203,10 +203,13 @@ PRERM
 chmod 0755 "${PKG_ROOT}/DEBIAN/prerm"
 
 # ── /opt/spendifai/launch.sh — per-user first-launch + run wrapper ──────────
-# Runs as the USER (invoked by the .desktop file via gnome-shell, not as root).
-# On first launch: creates per-user venv in ~/.spendifai/.venv, syncs deps,
-# then execs the pywebview launcher. On subsequent launches: just execs.
-cat > "${INSTALL_ROOT}/launch.sh" <<'LAUNCH'
+# Single source of truth in packaging/linux/launch.sh; .deb and .rpm both
+# copy it. Edit the script there, never inline here.
+cp "${SCRIPT_DIR}/launch.sh" "${INSTALL_ROOT}/launch.sh"
+chmod 0755 "${INSTALL_ROOT}/launch.sh"
+
+# (legacy inline heredoc kept disabled below — `: <<...` skips it)
+: <<'LAUNCH_OBSOLETE_HEREDOC'
 #!/bin/bash
 # =============================================================================
 #  Spendif.ai — user-space launcher (Linux)
@@ -291,8 +294,7 @@ fi
 # ── 4. Launch the pywebview app ─────────────────────────────────────────────
 cd "$APP_DIR"
 exec "$VENV_DIR/bin/python" -m desktop.launcher
-LAUNCH
-chmod 0755 "${INSTALL_ROOT}/launch.sh"
+LAUNCH_OBSOLETE_HEREDOC
 
 # ── .desktop file ────────────────────────────────────────────────────────────
 cat > "${PKG_ROOT}/usr/share/applications/spendifai.desktop" <<'DESKTOP'
