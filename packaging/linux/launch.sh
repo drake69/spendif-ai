@@ -92,25 +92,29 @@ cd "$APP_DIR"
 # so the subprocess inherits it.
 export UV_PROJECT_ENVIRONMENT="$VENV_DIR"
 
+# `--frozen` so uv does not try to update /opt/spendifai/uv.lock at runtime
+# (that file lives in a read-only system directory). The lockfile shipped
+# with the .deb / .rpm is canonical — we just install from it.
+UV_SYNC_FLAGS=(sync --extra desktop --frozen)
+
 # Pulsate dialog only on first launch — afterwards uv sync is sub-second.
 if $IS_FIRST_LAUNCH; then
   _with_progress \
     "Spendif.ai — Primo avvio" \
     "Sto preparando l'ambiente AI (3–8 min).\nQuesta è una sola volta.\nNon chiudere questa finestra." \
-    "$UV" sync --extra desktop || {
-      echo "uv sync failed, retrying CPU-only..."
+    "$UV" "${UV_SYNC_FLAGS[@]}" || {
+      echo "uv sync failed, retrying CPU-only (in same venv)..."
       unset CMAKE_ARGS FORCE_CMAKE
-      rm -rf "$VENV_DIR"
       _with_progress \
         "Spendif.ai — Primo avvio" \
         "Compilazione GPU fallita, riprovo CPU-only (qualche minuto in più)." \
-        "$UV" sync --extra desktop
+        "$UV" "${UV_SYNC_FLAGS[@]}"
     }
 else
-  "$UV" sync --extra desktop || {
+  "$UV" "${UV_SYNC_FLAGS[@]}" || {
     echo "uv sync failed, retrying CPU-only..."
     unset CMAKE_ARGS FORCE_CMAKE
-    "$UV" sync --extra desktop
+    "$UV" "${UV_SYNC_FLAGS[@]}"
   }
 fi
 
