@@ -134,15 +134,15 @@ _DEFAULT_LOCALE = _LOCALE["it"]
 # ── UI labels (multi-language minimal set for the wizard itself) ───────────────
 _UI: dict[str, dict] = {
     "it": {"next": "Avanti →", "back": "← Indietro", "start": "🚀 Inizia!",
-           "step_labels": ["Lingua", "Titolari", "Conti", "Conferma"]},
+           "step_labels": ["Lingua", "Titolari", "Conti", "Tassonomia", "Conferma"]},
     "en": {"next": "Next →",   "back": "← Back",      "start": "🚀 Let's go!",
-           "step_labels": ["Language", "Owners",   "Accounts", "Confirm"]},
+           "step_labels": ["Language", "Owners", "Accounts", "Taxonomy", "Confirm"]},
     "fr": {"next": "Suivant →","back": "← Retour",    "start": "🚀 Commencer!",
-           "step_labels": ["Langue",   "Titulaires","Comptes",  "Confirmer"]},
+           "step_labels": ["Langue", "Titulaires", "Comptes", "Taxonomie", "Confirmer"]},
     "de": {"next": "Weiter →", "back": "← Zurück",    "start": "🚀 Loslegen!",
-           "step_labels": ["Sprache",  "Inhaber",   "Konten",   "Bestätigen"]},
+           "step_labels": ["Sprache", "Inhaber", "Konten", "Taxonomie", "Bestätigen"]},
     "es": {"next": "Siguiente →","back": "← Atrás",   "start": "🚀 ¡Empezar!",
-           "step_labels": ["Idioma",   "Titulares", "Cuentas",  "Confirmar"]},
+           "step_labels": ["Idioma", "Titulares", "Cuentas", "Taxonomía", "Confirmar"]},
 }
 
 
@@ -398,8 +398,58 @@ def _step2_accounts(lang: str) -> None:
             st.rerun()
 
 
-def _step3_confirm(cfg_svc: SettingsService, lang_options: list[tuple[str, str]]) -> None:
-    """Step 3 — Riepilogo & conferma."""
+def _step3_taxonomy(cfg_svc: SettingsService, lang: str) -> None:
+    """Step 3 — Default taxonomy review.
+
+    The wizard auto-applies the default taxonomy for the chosen language
+    on confirm. Show the user what they'll get so they can decide whether
+    to keep it or customise it later from Settings → Taxonomy. We deliberately
+    do not let them edit it inline here: editing taxonomy is a non-trivial
+    bulk operation (rename / re-parent subcategories, etc.) and that page
+    already exists as Settings → Taxonomy. Forcing a second editor into the
+    onboarding wizard would just duplicate complex UI for a step most users
+    will keep as-is.
+    """
+    st.subheader(t("onboarding.step_taxonomy.title"))
+    st.caption(t("onboarding.step_taxonomy.caption"))
+
+    preview = cfg_svc.get_default_taxonomy_preview(lang)
+    expenses: list[str] = preview.get("expenses", [])
+    income: list[str] = preview.get("income", [])
+
+    col_exp, col_inc = st.columns(2)
+    with col_exp:
+        st.markdown(
+            f"**💸 {t('onboarding.step_taxonomy.expenses')}** "
+            f"({len(expenses)})"
+        )
+        for cat in expenses:
+            st.markdown(f"- {cat}")
+    with col_inc:
+        st.markdown(
+            f"**💰 {t('onboarding.step_taxonomy.income')}** "
+            f"({len(income)})"
+        )
+        for cat in income:
+            st.markdown(f"- {cat}")
+
+    st.info(t("onboarding.step_taxonomy.customize_later"), icon="🛠️")
+
+    st.divider()
+    col_back, _, col_next = st.columns([1, 2, 1])
+    with col_back:
+        if st.button(_ui(lang)["back"], use_container_width=True, key="_ob_tax_back"):
+            st.session_state[_K_STEP] = 2
+            st.rerun()
+    with col_next:
+        if st.button(_ui(lang)["next"], type="primary",
+                     use_container_width=True, key="_ob_tax_next"):
+            st.session_state[_K_STEP] = 4
+            st.rerun()
+
+
+def _step4_confirm(cfg_svc: SettingsService, lang_options: list[tuple[str, str]]) -> None:
+    """Step 4 — Riepilogo & conferma."""
     lang     = st.session_state[_K_LANG]
     names    = st.session_state.get(_K_NAMES, "").strip()
     accounts = [a for a in st.session_state.get(_K_ACCOUNTS, []) if a["name"].strip()]
@@ -437,15 +487,6 @@ def _step3_confirm(cfg_svc: SettingsService, lang_options: list[tuple[str, str]]
                 st.markdown(f"- **{acc['name']}**{bank_note}{type_note}")
         else:
             st.caption(t("onboarding.step3.no_accounts"))
-
-        preview = cfg_svc.get_default_taxonomy_preview(lang)
-        st.write("")
-        st.markdown(t("onboarding.step3.taxonomy_title"))
-        st.caption(
-            t("onboarding.step3.taxonomy_summary",
-              n_exp=len(preview['expenses']),
-              n_inc=len(preview['income']))
-        )
 
     # ── LLM Model status ───────────────────────────────────────────────
     st.write("")
@@ -500,13 +541,22 @@ def _step3_confirm(cfg_svc: SettingsService, lang_options: list[tuple[str, str]]
     col_back, _, col_start = st.columns([1, 2, 1])
     with col_back:
         if st.button(_ui(lang)["back"], use_container_width=True, key="_ob_conf_back"):
-            st.session_state[_K_STEP] = 2
+            st.session_state[_K_STEP] = 3
             st.rerun()
 
     with col_start:
+        # `help` shows a tooltip on hover. When the button is disabled we tell
+        # the user *why* — otherwise they're left staring at a greyed-out
+        # "Avvia" with no explanation.
+        _start_tooltip = (
+            t("onboarding.step3.start_disabled_tooltip")
+            if not _dl_ready
+            else None
+        )
         if st.button(_ui(lang)["start"], type="primary",
                      use_container_width=True, key="_ob_conf_start",
-                     disabled=not _dl_ready):
+                     disabled=not _dl_ready,
+                     help=_start_tooltip):
             _apply_onboarding(cfg_svc, lang, names, accounts, loc, country=country_code)
 
     # Auto-refresh every 2 s while we are waiting on the model so the user
@@ -620,4 +670,6 @@ def render_onboarding_page(engine) -> None:
     elif step == 2:
         _step2_accounts(lang)
     elif step == 3:
-        _step3_confirm(cfg_svc, lang_options)
+        _step3_taxonomy(cfg_svc, lang)
+    elif step == 4:
+        _step4_confirm(cfg_svc, lang_options)
