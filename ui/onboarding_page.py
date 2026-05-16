@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import os
+
 import streamlit as st
 
 from services.settings_service import SettingsService
@@ -462,7 +464,14 @@ def _apply_onboarding(
         # 1. Taxonomy (also sets description_language)
         n_cats = cfg_svc.apply_default_taxonomy(lang)
 
-        # 2. Locale + owner settings + UI language + country
+        # 2. Locale + owner settings + UI language + country + invisible LLM defaults.
+        # The LLM defaults are part of onboarding even though the wizard does not
+        # surface them: a fresh install needs a fully functional LLM backend
+        # configured the moment onboarding completes, otherwise the Import page
+        # would refuse to categorise with "llm_backend not configured". The
+        # desktop launcher downloads a llama.cpp GGUF in parallel and writes
+        # LLAMA_CPP_MODEL_PATH; we point llm_backend at it here so the app
+        # works end-to-end on first run with no further user intervention.
         _ui_lang = st.session_state.get("_ob_ui_lang", lang)
         cfg_svc.set_bulk({
             "date_display_format":     loc["date_display_format"],
@@ -472,6 +481,12 @@ def _apply_onboarding(
             "use_owner_names_giroconto": "true" if owner_names.strip() else "false",
             "ui_language":             _ui_lang,
             "country":                 country,
+            # ── Invisible LLM defaults ──────────────────────────────────────
+            "llm_backend":             "local_llama_cpp",
+            "cat_llm_backend":         "local_llama_cpp",
+            "llama_cpp_n_gpu_layers":  "0",      # CPU by default; user can opt-in via Settings
+            "llama_cpp_n_ctx":         "4096",   # fits Qwen2.5 / Gemma-3 / Phi-4
+            "llama_cpp_model_path":    os.environ.get("LLAMA_CPP_MODEL_PATH", ""),
         })
 
         # 3. Accounts

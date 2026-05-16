@@ -775,15 +775,33 @@ def _migrate_add_import_batch_tracking(engine) -> None:
 
 
 def _migrate_set_onboarding_done_for_existing_users(engine) -> None:
-    """Mark onboarding as complete for DBs that already have user-imported data.
+    """Mark onboarding as complete only when ALL prerequisites the wizard
+    would have configured are already present on the DB.
 
-    Prevents existing users from seeing the onboarding wizard after upgrading
-    to a version that introduces it. The signal is "the user has actually used
-    the app", which means at least one imported transaction — NOT the presence
-    of taxonomy rows, because the default taxonomy is auto-seeded on every
-    fresh install and would mark every new user as "already onboarded" (#AI-58).
+    The onboarding wizard collects:
+      * ``owner_names``  — required for import (transactions need owners)
+      * ``ui_language``  — controls all i18n strings
+      * a default taxonomy applied to the user's catalogue
+      * at least one account
+      * (eventually) real imported transactions
 
-    Does nothing if onboarding_done is already set.
+    Skipping the wizard is only safe when the user has actually used the app
+    before and ALL of those signals are present. Checking ``taxonomy_category``
+    alone (the previous heuristic) was wrong because the default taxonomy is
+    auto-seeded on every fresh install — every new user was silently flagged
+    as "already onboarded" (#AI-58).
+
+    Conditions to skip (ALL must hold):
+      1. ``ui_language`` setting is set         — language pref configured
+      2. ``owner_names`` setting is non-empty  — required for import
+      3. at least one ``account`` row exists   — accounts step completed
+      4. ``llm_backend`` setting is non-empty  — LLM defaults configured
+
+    Note that the presence of ``transaction`` rows is NOT a prerequisite:
+    a user can legitimately complete the wizard and only later import data.
+
+    Does nothing if ``onboarding_done`` is already set explicitly (true or
+    false) — that's a deliberate user/test override, not a heuristic call.
     """
     from sqlalchemy import text as _text
     with engine.connect() as conn:
@@ -792,15 +810,30 @@ def _migrate_set_onboarding_done_for_existing_users(engine) -> None:
         )).scalar()
         if existing is not None:
             return  # already decided — don't touch
-        # Imported transactions = real prior usage. Default taxonomy seed does
-        # NOT count: it ships with every fresh install.
-        count = conn.execute(_text('SELECT COUNT(*) FROM "transaction"')).scalar()
-        if count and count > 0:
-            conn.execute(_text(
-                "INSERT OR REPLACE INTO user_settings (key, value) "
-                "VALUES ('onboarding_done', 'true')"
-            ))
-            conn.commit()
+
+        def _setting(key: str) -> str | None:
+            return conn.execute(_text(
+                "SELECT value FROM user_settings WHERE key = :k"
+            ), {"k": key}).scalar()
+
+        owner_names = (_setting("owner_names") or "").strip()
+        ui_language = (_setting("ui_language") or "").strip()
+        llm_backend = (_setting("llm_backend") or "").strip()
+        if not owner_names or not ui_language or not llm_backend:
+            return
+
+        try:
+            acct_count = conn.execute(_text("SELECT COUNT(*) FROM account")).scalar() or 0
+        except Exception:
+            acct_count = 0
+        if acct_count <= 0:
+            return
+
+        conn.execute(_text(
+            "INSERT OR REPLACE INTO user_settings (key, value) "
+            "VALUES ('onboarding_done', 'true')"
+        ))
+        conn.commit()
 
 
 def _migrate_add_header_sha256(engine) -> None:

@@ -233,27 +233,54 @@ class TestOnboardingFlag:
 # ── Auto-skip migration for existing users ────────────────────────────────────
 
 class TestAutoSkipMigration:
-    def test_db_with_imported_transactions_gets_onboarding_done(self):
-        """An existing user (has real imported transactions) skips the wizard."""
+    """Migration auto-skip detects 'real existing user' via the 4 signals the
+    onboarding wizard would have set: ui_language, owner_names, llm_backend,
+    and at least one account row.
+    """
+
+    @staticmethod
+    def _seed_user_settings(conn, **overrides):
+        """Insert the four required signals; tests override one to assert each guard."""
+        defaults = {
+            "ui_language": "it",
+            "owner_names": "Mario Rossi",
+            "llm_backend": "local_llama_cpp",
+        }
+        defaults.update(overrides)
+        for k, v in defaults.items():
+            conn.execute(text(
+                "INSERT OR REPLACE INTO user_settings (key, value) VALUES (:k, :v)"
+            ), {"k": k, "v": v})
+
+    @staticmethod
+    def _seed_account(conn):
+        conn.execute(text(
+            "INSERT INTO account (name, bank_name, account_type) "
+            "VALUES ('main', 'Bank', 'bank_account')"
+        ))
+
+    def _new_engine_with_migrations(self):
         from sqlalchemy import create_engine as _ce
         from db.models import (
             Base,
             _migrate_add_user_settings,
             _migrate_add_taxonomy_default,
             _migrate_add_taxonomy,
-            _migrate_set_onboarding_done_for_existing_users,
         )
         eng = _ce("sqlite:///:memory:", connect_args={"check_same_thread": False})
         Base.metadata.create_all(eng)
         _migrate_add_user_settings(eng)
         _migrate_add_taxonomy_default(eng)
         _migrate_add_taxonomy(eng)
-        # Insert one fake transaction to simulate a user who has actually used the app.
+        return eng
+
+    def test_returning_user_with_all_signals_skips_wizard(self):
+        """All 4 prerequisites present → migration marks onboarding_done."""
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
         with eng.connect() as conn:
-            conn.execute(text(
-                "INSERT INTO \"transaction\" (id, date, amount, description, source_file) "
-                "VALUES ('abc123', '2025-01-01', 10.0, 'past usage', 'legacy.csv')"
-            ))
+            self._seed_user_settings(conn)
+            self._seed_account(conn)
             conn.commit()
         _migrate_set_onboarding_done_for_existing_users(eng)
 
@@ -261,42 +288,58 @@ class TestAutoSkipMigration:
         assert svc.is_onboarding_done() is True
 
     def test_fresh_db_with_only_seeded_taxonomy_does_not_skip_onboarding(self):
-        """Regression for #AI-58: default taxonomy seed must not be mistaken
-        for a returning user. Fresh installs always have taxonomy_category > 0
-        because _migrate_add_taxonomy seeds defaults; without this guard every
-        first-time user was silently skipped past the wizard."""
-        from sqlalchemy import create_engine as _ce
-        from db.models import (
-            Base,
-            _migrate_add_user_settings,
-            _migrate_add_taxonomy_default,
-            _migrate_add_taxonomy,
-            _migrate_set_onboarding_done_for_existing_users,
-        )
-        eng = _ce("sqlite:///:memory:", connect_args={"check_same_thread": False})
-        Base.metadata.create_all(eng)
-        _migrate_add_user_settings(eng)
-        _migrate_add_taxonomy_default(eng)
-        _migrate_add_taxonomy(eng)          # seeds taxonomy_category — fresh install
-        # NO transactions inserted — this is a brand-new user.
+        """Regression for #AI-58: default taxonomy seed alone must not trigger skip."""
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        # No user_settings overrides → owner_names/ui_language/llm_backend missing
         _migrate_set_onboarding_done_for_existing_users(eng)
 
         svc = SettingsService(eng)
         assert svc.is_onboarding_done() is False
 
-    def test_empty_db_does_not_get_onboarding_done(self):
-        """A fresh DB with no transactions and no seed must NOT mark onboarding_done."""
-        from sqlalchemy import create_engine as _ce
-        from db.models import (
-            Base,
-            _migrate_add_user_settings,
-            _migrate_add_taxonomy_default,
-            _migrate_set_onboarding_done_for_existing_users,
-        )
-        eng = _ce("sqlite:///:memory:", connect_args={"check_same_thread": False})
-        Base.metadata.create_all(eng)
-        _migrate_add_user_settings(eng)
-        _migrate_add_taxonomy_default(eng)
+    def test_missing_owner_names_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn, owner_names="")
+            self._seed_account(conn)
+            conn.commit()
+        _migrate_set_onboarding_done_for_existing_users(eng)
+
+        svc = SettingsService(eng)
+        assert svc.is_onboarding_done() is False
+
+    def test_missing_ui_language_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn, ui_language="")
+            self._seed_account(conn)
+            conn.commit()
+        _migrate_set_onboarding_done_for_existing_users(eng)
+
+        svc = SettingsService(eng)
+        assert svc.is_onboarding_done() is False
+
+    def test_missing_llm_backend_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn, llm_backend="")
+            self._seed_account(conn)
+            conn.commit()
+        _migrate_set_onboarding_done_for_existing_users(eng)
+
+        svc = SettingsService(eng)
+        assert svc.is_onboarding_done() is False
+
+    def test_missing_account_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn)
+            conn.commit()
+        # No account inserted
         _migrate_set_onboarding_done_for_existing_users(eng)
 
         svc = SettingsService(eng)
