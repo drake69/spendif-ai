@@ -163,34 +163,54 @@ Tail-li tutti durante un test di avvio fresh:
 
 ## 5. Cleanup — partire da zero
 
-Per simulare un'installazione fresh (utile per testare il wizard
-onboarding end-to-end):
+Tre script per OS che cancellano ogni traccia di Spendif.ai
+(processi attivi, pacchetto di sistema, stato utente, cache Hugging
+Face, log launcher) — necessari per i test reali di install AI-51.
 
 ```bash
-# macOS / Linux
-rm -rf ~/.spendifai/
+# macOS
+bash packaging/macos/cleanup.sh                   # interattivo (chiede conferma)
+bash packaging/macos/cleanup.sh --yes             # senza prompt
+bash packaging/macos/cleanup.sh --keep-models     # preserva la cache GGUF
 
-# Windows (PowerShell)
-Remove-Item -Recurse -Force $HOME\.spendifai
+# Linux (Debian/Ubuntu, Fedora/RHEL — rileva apt vs dnf)
+bash packaging/linux/cleanup.sh
+sudo bash packaging/linux/cleanup.sh --yes        # sudo per rimuovere il pacchetto di sistema
+bash packaging/linux/cleanup.sh --keep-models
+
+# Windows
+.\packaging\windows\cleanup.ps1                   # auto-eleva se necessario
+.\packaging\windows\cleanup.ps1 -Yes -KeepModels
+.\packaging\windows\cleanup.ps1 -Yes -RemoveDevCert  # rimuove anche il cert self-signed
 ```
 
-`~/.spendifai/` contiene il DB (`ledger.db`), il modello scaricato, il
-file di stato del download, i log e il `.env`. Cancellarlo costringe:
+Cosa fa ciascuno script, in ordine:
+
+1. Killa processi SpendifAi / Streamlit / launcher attivi.
+2. Disinstalla il pacchetto di sistema: `apt remove --purge` /
+   `dnf remove` / `Remove-AppxPackage` / `rm /Applications/SpendifAi.app`.
+3. Cancella lo stato utente in `~/.spendifai/` (Linux/macOS) o in
+   `~\AppData\{Roaming,Local}\Spendif.ai` (Windows).
+4. Cancella `~/.cache/huggingface/` se non passi `--keep-models`
+   (i bytes GGUF del modello vivono lì durante il download).
+5. Rimuove il log launcher (solo macOS — su Linux/Windows è dentro
+   `~/.spendifai/` e va via allo step 3).
+
+Dopo il cleanup, il prossimo install fa partire:
 
 - Pagina immersiva di primo avvio (no sidebar)
-- Ri-download del modello da HuggingFace (≈3 GB, 5–15 min)
+- Ri-download del modello da HuggingFace (~3 GB, 5–15 min)
 - Wizard onboarding completo a 4 step
 
-Mantieni il modello esistente e ripulisci solo DB + env:
+### Cleanup parziale
+
+Per controllo più fine, target su singoli file:
 
 ```bash
+# Mantieni il modello, cancella solo DB + env (iter più rapide del wizard)
 rm -f ~/.spendifai/ledger.db ~/.spendifai/.env
-```
 
-Per riattivare solo il wizard onboarding, elimina la riga in
-`user_settings` con chiave `onboarding_done` (il DB resta intatto):
-
-```bash
+# Ri-trigger solo il wizard (mantieni DB + transazioni + conti)
 sqlite3 ~/.spendifai/ledger.db "DELETE FROM user_settings WHERE key='onboarding_done';"
 ```
 
@@ -198,17 +218,44 @@ sqlite3 ~/.spendifai/ledger.db "DELETE FROM user_settings WHERE key='onboarding_
 
 ## 6. Issue note e workaround
 
-### La build RPM in CI fallisce
+### Build RPM (AI-56 — fixato)
 
-`packaging/linux/build-rpm.sh` riferisce `packaging/macos/spendifai_256.png`
-nella sezione `%files` in modo non condizionale. Il file è generato da
-`create_icon.py` solo come parte del flusso macOS `.icns`, quindi sul
-runner Linux della CI manca e la build si interrompe con `File not
-found: ... spendifai.png`.
+Prima: `packaging/linux/build-rpm.sh` riferiva l'icona hicolor nel
+`%files` in modo non condizionale. Sul runner CI il PNG era assente
+e rpmbuild si interrompeva. Ora l'entry icona è condizionale su
+`ICON_PRESENT=1`. Build verde in entrambi i casi; se il PNG è
+fornito l'icona viene impacchettata, altrimenti il pacchetto va
+senza.
 
-Workaround attuale: salta RPM, distribuisci via `.deb` (che già
-gestisce correttamente la presenza opzionale dell'icona). Tracciato
-come item di backlog AI-56.
+### Wizard skippato su DB fresh (AI-58 — aperto, P0)
+
+Dopo cleanup e reinstall, la pagina immersiva di primo avvio non
+appare: si vede direttamente la sidebar e il warning "I nomi dei
+titolari non sono configurati" sulla pagina Import. Causa:
+`db/models.py:785-798` setta `onboarding_done=true` se
+`taxonomy_category` ha righe, ma la taxonomy italiana di default
+viene auto-seedata sempre, quindi il flag è sempre settato.
+
+Workaround finché il fix non arriva, riattivazione manuale del wizard:
+
+```bash
+sqlite3 ~/.spendifai/ledger.db "DELETE FROM user_settings WHERE key='onboarding_done';"
+```
+
+### Download modello fallisce 401 su M1/M2 Pro/Max (AI-59 — aperto, P0)
+
+Il catalog del model_manager seleziona `google/gemma-3-12b-it-GGUF`
+per macchine con ≥ 16 GB VRAM, ma quel repo HuggingFace non è
+pubblico — ogni HEAD ritorna `401 Unauthorized` e lo status download
+mostra "modello non viene scaricato".
+
+Workaround finché il catalog non viene corretto: cap della VRAM
+rilevata via env var (il model_manager rispetta
+`SPENDIFAI_MAX_VRAM_MB`). Esempio per forzare il tier 8 GB:
+
+```bash
+echo "SPENDIFAI_MAX_VRAM_MB=8192" >> ~/.spendifai/.env
+```
 
 ### MSIX "Editore sconosciuto"
 
@@ -268,6 +315,8 @@ tail -f ~/Library/Logs/spendifai-launcher.log
 tail -f ~/.spendifai/logs/app_*.log
 cat ~/.spendifai/model_download.status | python3 -m json.tool
 
-# Simulazione stato fresh
-rm -rf ~/.spendifai/
+# Simulazione stato fresh (cleanup totale)
+bash packaging/macos/cleanup.sh --yes           # macOS
+bash packaging/linux/cleanup.sh --yes           # Linux
+.\packaging\windows\cleanup.ps1 -Yes            # Windows
 ```
