@@ -49,6 +49,11 @@
     .step-img img { max-width: 100%; max-height: 100%; border-radius: 8px; }
     .step-img .ph { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
     .step-img .ph code { background: var(--bg); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+.features-list { list-style: none; padding: 0; margin: 1.5rem 0 0 0; }
+    .features-list li { padding: 1rem 1.2rem; background: var(--surface); border-radius: 8px; margin-bottom: 0.75rem; border-left: 3px solid var(--blue); color: var(--muted); }
+    .features-list li strong { color: var(--text); }
+    .features-list li .beta-tag { color: var(--orange); font-weight: 600; font-size: 0.85rem; margin-left: 0.3rem; }
+    .features-list li .beta-note { color: var(--muted); font-size: 0.85rem; font-style: italic; display: block; margin-top: 0.3rem; }
     .note { background: var(--surface); border-left: 4px solid var(--orange); padding: 1rem 1.2rem; border-radius: 6px; margin: 1.5rem 0; }
     .note strong { color: var(--orange); }
     footer { border-top: 1px solid var(--border); padding: 2rem 1.5rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
@@ -60,6 +65,7 @@
     <div class="nav-inner">
       <div class="nav-brand"><a href="/">Spendif.ai</a></div>
       <div class="nav-links">
+        <a href="#what-you-get">Wat je krijgt</a>
         <a href="#download">Downloaden</a>
         <a href="#install">Installeren</a>
         <a href="#first-launch">Eerste start</a>
@@ -75,6 +81,18 @@
 
   <div class="wrap">
 
+
+    <section id="what-you-get">
+      <h2><span class="step-num" style="background:var(--green)">✨</span>Wat je krijgt</h2>
+      <ul class="features-list">
+        <li><strong>Importeert CSV/XLSX van elke bank</strong> — herkent het formaat automatisch, geen handmatige mapping</li>
+        <li><strong>AI-categorisatie, volledig offline</strong> — lokaal LLM inbegrepen, geen cloud nodig</li>
+        <li><strong>Lokale AI standaard</strong> — gegevens blijven op je machine; remote LLM is opt-in en redigeert IBAN / kaarten / rekeninghouder-namen (bedragen en datums reizen nog steeds — zie roadmap)</li>
+        <li><strong>Vijf talen</strong> — Italiaans, Engels, Frans, Duits, Spaans</li>
+        <li><strong>Kaart-rekening reconciliatie</strong> <span class="beta-tag">(bèta)</span> — koppelt creditcard-afschrijvingen aan de onderliggende uitgaven om dubbeltelling te voorkomen<span class="beta-note">(edge cases nog in verfijning)</span></li>
+        <li><strong>Detectie van interne overboekingen</strong> <span class="beta-tag">(bèta)</span> — matcht overboekingen tussen je eigen rekeningen zodat ze de dashboards niet opblazen<span class="beta-note">(edge cases nog in verfijning)</span></li>
+      </ul>
+    </section>
     <section id="download">
       <h2><span class="step-num">1</span>Download voor jouw systeem</h2>
       <p>De officiële installers worden gepubliceerd als assets van elke <a href="https://github.com/drake69/spendify/releases/latest" target="_blank">GitHub Release</a>. Kies het juiste formaat voor je OS.</p>

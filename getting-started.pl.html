@@ -49,6 +49,11 @@
     .step-img img { max-width: 100%; max-height: 100%; border-radius: 8px; }
     .step-img .ph { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
     .step-img .ph code { background: var(--bg); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+.features-list { list-style: none; padding: 0; margin: 1.5rem 0 0 0; }
+    .features-list li { padding: 1rem 1.2rem; background: var(--surface); border-radius: 8px; margin-bottom: 0.75rem; border-left: 3px solid var(--blue); color: var(--muted); }
+    .features-list li strong { color: var(--text); }
+    .features-list li .beta-tag { color: var(--orange); font-weight: 600; font-size: 0.85rem; margin-left: 0.3rem; }
+    .features-list li .beta-note { color: var(--muted); font-size: 0.85rem; font-style: italic; display: block; margin-top: 0.3rem; }
     .note { background: var(--surface); border-left: 4px solid var(--orange); padding: 1rem 1.2rem; border-radius: 6px; margin: 1.5rem 0; }
     .note strong { color: var(--orange); }
     footer { border-top: 1px solid var(--border); padding: 2rem 1.5rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
@@ -60,6 +65,7 @@
     <div class="nav-inner">
       <div class="nav-brand"><a href="/">Spendif.ai</a></div>
       <div class="nav-links">
+        <a href="#what-you-get">Co otrzymujesz</a>
         <a href="#download">Pobierz</a>
         <a href="#install">Instaluj</a>
         <a href="#first-launch">Pierwsze uruchomienie</a>
@@ -75,6 +81,18 @@
 
   <div class="wrap">
 
+
+    <section id="what-you-get">
+      <h2><span class="step-num" style="background:var(--green)">✨</span>Co otrzymujesz</h2>
+      <ul class="features-list">
+        <li><strong>Importuje CSV/XLSX z dowolnego banku</strong> — automatyczne rozpoznawanie formatu, bez ręcznego mapowania</li>
+        <li><strong>Kategoryzacja AI, w pełni offline</strong> — lokalny LLM w zestawie, chmura nie jest potrzebna</li>
+        <li><strong>Lokalna AI domyślnie</strong> — dane pozostają na Twoim komputerze; zdalny LLM jest opt-in i redaguje IBAN / karty / nazwiska właścicieli (kwoty i daty nadal podróżują — zobacz roadmap)</li>
+        <li><strong>Pięć języków</strong> — włoski, angielski, francuski, niemiecki, hiszpański</li>
+        <li><strong>Uzgadnianie karta-konto</strong> <span class="beta-tag">(beta)</span> — paruje obciążenia kartą z pierwotnymi wydatkami, aby uniknąć podwójnego liczenia<span class="beta-note">(przypadki brzegowe są jeszcze dopracowywane)</span></li>
+        <li><strong>Wykrywanie transferów wewnętrznych</strong> <span class="beta-tag">(beta)</span> — dopasowuje transfery między Twoimi kontami, aby nie zawyżały dashboardów<span class="beta-note">(przypadki brzegowe są jeszcze dopracowywane)</span></li>
+      </ul>
+    </section>
     <section id="download">
       <h2><span class="step-num">1</span>Pobierz dla swojego systemu</h2>
       <p>Oficjalne instalatory są publikowane jako zasoby każdego <a href="https://github.com/drake69/spendify/releases/latest" target="_blank">GitHub Release</a>. Wybierz format odpowiedni dla Twojego systemu.</p>

@@ -27,11 +27,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Getting-started page on gh-pages, full 9-locale coverage (`getting-started.{html,en,de,es,fr,ja,nl,pl,pt}.html`): three-step illustrated install/first-launch guide with download buttons for DMG/MSIX/.deb/.rpm and screenshot placeholders (`assets/screenshots/`). Each page includes the Cloudflare Web Analytics beacon and a full language switcher
 - Updated `installation_{macos,windows}.{md,it.md}` "First Launch" section to describe the native pywebview flow (splash + model download + onboarding wizard), replacing the obsolete Terminal/browser sequence which only applies to the legacy `install.sh`/`install.ps1` scripts
 - Landing pages (all 9 locales: `index.html` IT, `index.{en,de,es,fr,ja,nl,pl,pt}.html`): added localized "Download installer" CTA pointing to the locale-matched getting-started page above the existing curl-script tabs
+- README restructured for technical/developer audience (was a mix of end-user + dev content): trimmed from 663 → ~180 lines, banner directing end users to the gh-pages getting-started, six "What's implemented" bullets with file paths + RF-codes + honest beta tags, develop-locally section with Ollama vs llama.cpp clarification, reciprocal IT·EN documentation links
+- New `docs/architecture.{md,it.md}` capturing the layer diagram and Flow 1 vs Flow 2 details previously inlined in the README
+- New `docs/design_decisions.{md,it.md}` capturing the Decimal/SHA-256/invert_sign/RF-03/RF-04 rationale previously inlined in the README, with explicit `(beta)` status flags on RF-03 and RF-04
+- New "What you get" section on all 9 `getting-started.*.html` pages with six user-value bullets (translated into all locales) — duplicate-free framing complementing the README's "What's implemented"
+- README "What leaves the machine" section made explicit and honest: shows a concrete before/after PII redaction example and acknowledges that transaction **amounts** and **dates** still travel to remote LLM backends in the current implementation (backlog AI-55 covers redaction modes). Privacy bullet on all 9 gh-pages getting-started rewritten in the same honest tone
 
 ### Fixed
 - Schema auto-invalidation: cached schemas (Flow 1) producing < 10% parse rate are automatically deleted and retried with Flow 2 (LLM re-classification)
 - Orphan schema purge: startup migration removes `document_schema` rows without `header_sha256`, preventing unreachable stale entries
 - Header SHA256 always populated on schema before persist, preventing orphan schemas from being created
+- Sanitizer crash on pandas 2.x `string`-dtype columns with NaN: `astype(str).tolist()` was leaking float NaNs into the regex-based sanitizer, raising `TypeError: expected string or bytes-like object, got 'float'` on real bank CSV imports. Fix in `core/classifier.py` (`fillna("").astype(str)`) plus defensive guard in `core/sanitizer.py` (`redact_pii` coerces non-string inputs to `""`). 5 regression tests in `tests/test_sanitizer.py::TestNonStringInputs` (#108)
 
 ## [0.1.0] - 2026-04-06
 

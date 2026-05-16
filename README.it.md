@@ -6,573 +6,180 @@
 [![License: PolyForm NC](https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange)](LICENSE)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Streamlit](https://img.shields.io/badge/UI-Streamlit-ff4b4b?logo=streamlit&logoColor=white)](https://streamlit.io)
-[![Issues](https://img.shields.io/github/issues/drake69/spendifai)](https://github.com/drake69/spendify/issues)
-[![Last commit](https://img.shields.io/github/last-commit/drake69/spendifai)](https://github.com/drake69/spendify/commits/main)
+[![Issues](https://img.shields.io/github/issues/drake69/spendify)](https://github.com/drake69/spendify/issues)
+[![Last commit](https://img.shields.io/github/last-commit/drake69/spendify)](https://github.com/drake69/spendify/commits/main)
 [![Supporta su Patreon](https://img.shields.io/badge/Patreon-offrimi%20un%20caffè%20☕-F96854?logo=patreon&logoColor=white)](https://patreon.com/drake69)
 
 > 🇬🇧 [Read in English](README.md)
 
-Registro finanziario personale unificato con pipeline ibrida deterministica + LLM.
-
-Aggrega movimenti eterogenei (conti correnti, carte di credito, carte di debito, conti deposito, prepagate) in un unico ledger cronologico, eliminando il double-counting da addebiti carta periodici e da giroconti interni. Il processing avviene in modalità **offline-first**; i backend LLM remoti sono supportati come opt-in con sanitizzazione PII obbligatoria.
+Registro finanziario personale unificato con pipeline ibrida deterministica + LLM. Aggrega export bancari eterogenei (conti correnti, carte di credito/debito/prepagate, conti deposito) in un unico ledger cronologico, eliminando il double-counting da addebiti carta periodici e giroconti interni. Offline-first; backend LLM remoti opt-in con sanitizzazione PII obbligatoria.
 
 ---
 
-## Indice
-
-- [Caratteristiche principali](#caratteristiche-principali)
-- [Architettura](#architettura)
-- [Struttura del progetto](#struttura-del-progetto)
-- [Installazione](#installazione)
-- [Configurazione](#configurazione)
-- [Avvio](#avvio)
-- [Tassonomia](#tassonomia)
-- [Motore delle regole](#motore-delle-regole)
-- [Giroconti](#giroconti)
-- [Test](#test)
-- [Decisioni di design](#decisioni-di-design)
+> 👋 **Utente finale — vuoi installare Spendif.ai?**
+> Vai alla [pagina Primo avvio](https://drake69.github.io/spendify/getting-started.html) per la guida illustrata di installazione + primo avvio. Questo README è per sviluppatori e contributor.
 
 ---
 
-## Caratteristiche principali
+## Cos'è (tecnicamente)
 
-| Funzionalità | Dettaglio |
-|---|---|
-| **Classificazione automatica** | Rileva tipo di documento (conto corrente, carta, prepagata, deposito) senza configurazione preventiva |
-| **Normalizzazione deterministica** | Encoding detection, delimiter detection, header detection, importi in `Decimal` (mai `float`) |
-| **Correzione segno carta** | Flag `invert_sign` in `DocumentSchema`: quando un file carta salva le spese come valori positivi, vengono negati automaticamente |
-| **Idempotenza SHA-256** | Re-importare lo stesso file produce esattamente lo stesso insieme di righe |
-| **Riconciliazione carta–c/c (RF-03)** | Algoritmo a 3 fasi che elimina il double-counting da addebiti aggregati mensili |
-| **Rilevamento giroconti (RF-04)** | Matching simbolico importo+finestra temporale; esclusione o neutralizzazione configurabile |
-| **Categorizzazione a cascata (RF-05)** | Regole utente → regex statiche → LLM strutturato → fallback "Altro" |
-| **Motore regole con applicazione retroattiva** | Le regole deterministiche vengono applicate a tutte le transazioni esistenti al momento del salvataggio, non solo alle future importazioni |
-| **Sottocategoria come fonte di verità** | La sottocategoria è la chiave primaria: se LLM o regola assegna una sottocategoria presente in tassonomia, la categoria genitore viene risolta automaticamente |
-| **Wizard di onboarding guidato** | Wizard in 4 step al primo avvio: selezione lingua (rilevata dal browser), nomi titolari, conti bancari, conferma. Scrittura atomica: il DB viene popolato solo al clic su "Inizia!". Saltato automaticamente se esiste già una tassonomia (installazioni esistenti). |
-| **Tassonomia multi-lingua** | Template built-in in 5 lingue (🇮🇹 🇬🇧 🇫🇷 🇩🇪 🇪🇸). Salvati nella tabella `taxonomy_default` del DB (nessun file YAML richiesto). Lingua scelta all'onboarding; reimpostabile da Impostazioni in qualsiasi momento. |
-| **Tassonomia a 2 livelli nel DB** | 15 categorie di spesa + 7 di entrata; gestita dalla pagina Tassonomia (DB-backed, nessun restart richiesto) |
-| **Backend LLM multi-provider** | Ollama (locale, default), OpenAI, Claude — interfaccia astratta comune, nessun LangChain |
-| **Config LLM nell'UI** | Backend, modello e chiavi API configurabili dalla pagina Impostazioni senza toccare `.env` |
-| **PII sanitization (RF-10)** | IBAN, PAN, CF, nomi del titolare redatti prima di qualsiasi chiamata remota |
-| **Circuit breaker** | Fallback automatico su Ollama locale; quarantena (`to_review=True`) se tutti i backend falliscono |
-| **Contesti di vita** | Dimensione ortogonale configurabile dall'utente (es. Quotidianità / Lavoro / Vacanza) assegnabile a ogni transazione; suggerimenti automatici basati su similarità Jaccard con transazioni precedenti |
-| **Re-run LLM su fallimenti** | Pulsante nella pagina Review che rielabora solo le transazioni in cui l'LLM aveva fallito (`description == raw_description`) |
-| **Rilevamento giroconti cross-account** | Pulsante nella pagina Review che riesegue `detect_internal_transfers` globalmente su tutte le transazioni, intercettando le coppie non trovate in fase di import |
-| **Permutazioni nome titolare** | Tutte le permutazioni dei token del nome del titolare vengono verificate per il rilevamento giroconti, evitando i falsi negativi quando l'ordine varia tra i file |
-| **Service layer + CI coupling gate** | Tutte le pagine UI importano solo da `services.*`, mai da `core.*` o `db.*` direttamente. `tools/coupling_check.py --strict` applica il vincolo in CI; le violazioni bloccano la PR. |
-| **Persistenza SQLAlchemy** | 11 tabelle ORM; CRUD idempotente; migrazioni automatiche all'avvio |
-| **Progresso import cross-session** | Stato del job di importazione salvato nel DB; tutte le sessioni browser vedono il progresso in tempo reale |
-| **Export report** | HTML standalone (Plotly), CSV, XLSX |
-| **UI Streamlit 9 pagine** | Import → Ledger → Modifiche massive → Analytics → Review → Regole → Tassonomia → Impostazioni → Check List |
-| **Check List mensile** | Tabella pivot mese × conto con conteggio transazioni; evidenzia i mesi mancanti a colpo d'occhio |
+- **Python 3.13 · Streamlit · SQLAlchemy · Pydantic · Pandas**
+- **Pipeline ibrida**: normalizer deterministico + classifier LLM + categorizer a cascata
+- **LLM multi-backend** con circuit breaker: llama.cpp (default per desktop), Ollama, OpenAI, Claude — uso diretto dell'SDK, niente LangChain
+- **Launcher desktop nativo**: pywebview + PyInstaller → DMG / MSIX / .deb / .rpm
+- **UI Streamlit a 14 pagine**, i18n IT+EN completo (760+ chiavi di traduzione)
 
----
+## Cosa è implementato
+
+- **Pipeline ibrida (deterministica + LLM)** — `core/normalizer.py` parsa qualunque export bancario tabellare; `core/classifier.py` deduce `DocumentSchema` via LLM; `core/categorizer.py` esegue una cascata a 4 step (regole utente → regex → LLM → fallback)
+- **LLM multi-backend con circuit breaker** — factory in `core/llm_backends.py`: llama.cpp, Ollama, OpenAI, Claude. Fallback automatico + quarantena su fallimento
+- **PII sanitization (RF-10)** — redazione di IBAN / PAN / codice fiscale / nomi titolari in `core/sanitizer.py`, obbligatoria prima di qualsiasi call remota (`assert_sanitized()` è una precondizione, non best-effort)
+- **Tassonomia multilingua** — 2 livelli in DB, 5 lingue (it/en/fr/de/es), configurabile dall'UI Streamlit
+- **Riconciliazione carta-conto (RF-03, beta)** — algoritmo a 3 fasi in `core/normalizer.py`: appaia gli addebiti carta con le spese sottostanti per eliminare il double-counting *(edge cases ancora in raffinamento)*
+- **Rilevazione giroconti interni (RF-04, beta)** — matching su importo simbolico + finestra di ±7 giorni, con permutazioni dei nomi titolare per intercettare export tipo "Cognome Nome" *(edge cases ancora in raffinamento)*
+
+## 👩‍💻 Sviluppo locale
+
+```bash
+git clone https://github.com/drake69/spendify.git
+cd spendify
+uv sync --extra desktop
+
+# LLM locale (scelta dello sviluppatore — l'installer desktop gestisce
+# questo automaticamente):
+#   → se hai già Ollama attivo:   ollama pull gemma3:12b
+#   → altrimenti: `uv sync` installa llama-cpp-python e il launcher
+#     scarica automaticamente un modello GGUF al primo avvio
+
+./start.sh                    # oppure: streamlit run app.py
+```
+
+Prerequisiti: **Python 3.13+**, **[uv](https://github.com/astral-sh/uv)**, e in alternativa Ollama o nulla (llama.cpp è bundle). Setup completo → [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Eseguire come app desktop nativa da sorgente
+
+```bash
+uv run python -m desktop.launcher
+```
+
+Apre una finestra pywebview, scarica un modello AI al primo avvio, e avvia Streamlit dentro la stessa finestra. Identico all'esperienza DMG/MSIX confezionata.
+
+## Eseguire i test
+
+```bash
+uv run pytest -v                                  # suite completa (no mock LLM)
+uv run pytest --cov=. --cov-report=term-missing   # con coverage (target ≥ 90%)
+uv run pytest -k "architecture"                   # gate separazione layer
+uv run pytest -k "security"                       # forbidden pattern + SQL injection
+```
+
+I test architetturali e di sicurezza sono gate CI obbligatori e devono restare verdi su `main`.
 
 ## Architettura
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                            app.py  (Streamlit)                           │
-│  [onboarding gate] → sidebar → upload │ ledger │ bulk-edit │ analytics  │
-│                               review │ rules │ taxonomy │ settings       │
-└──────────────────────────┬───────────────────────────────────────────────┘
-                           │ services.*  (facade layer)
-               core/orchestrator.py
-               ProcessingConfig  ·  process_file()
-                           │
-        ┌──────────────────┼───────────────────┐
-        │                  │                   │
- Flow 1 (template)    Flow 2 (schema-on-read)
- DocumentSchema        classifier.py → LLM  → DocumentSchema
- già noto              (campione sanitizzato)    invert_sign detection
-        │
- normalizer.py          sanitizer.py      llm_backends.py
- ├─ encoding detect     ├─ IBAN/PAN/CF    ├─ OllamaBackend
- ├─ parse_amount()      ├─ owner names    ├─ OpenAIBackend
- ├─ SHA-256 tx_id       └─ assert_sani.. └─ ClaudeBackend
- ├─ invert_sign                              BackendFactory
- ├─ RF-03 reconcile                          call_with_fallback()
- └─ RF-04 transfers
-        │
- categorizer.py  ←── TaxonomyConfig (caricato dal DB)
- Step 0: regole utente  (risoluzione sottocategoria → categoria)
- Step 1: regex statiche
- Step 2: stub ML
- Step 3: LLM structured output  (enum sottocategorie vincolato)
- Step 4: fallback "Altro"
-        │
-    db/repository.py   (SQLAlchemy, idempotente)
-    └─ Transaction · ImportBatch · DocumentSchemaModel
-       ReconciliationLink · InternalTransferLink · CategoryRule
-       UserSettings · ImportJob · Account
-       TaxonomyCategory · TaxonomySubcategory · TaxonomyDefault
-        │
-    reports/generator.py
-    └─ HTML (Jinja2+Plotly) · CSV · XLSX
+ui/  →  services/  →  core/  →  db/  →  SQLite
+                ↑       ↑
+       async_runner  llm_backends · sanitizer · normalizer · classifier · categorizer
 ```
 
-### Flow 1 vs Flow 2
+L'UI può importare solo da `services/`; `core/` non può importare `db/`; `db/` non importa mai verso l'alto. Il coupling gate (`tools/coupling_check.py --strict`) blocca le PR che violano la regola.
 
-| | Flow 1 | Flow 2 |
-|---|---|---|
-| **Attivazione** | `DocumentSchema` già in DB per quel fingerprint colonne | Prima importazione di un nuovo formato |
-| **Schema** | Recuperato da DB, applicato direttamente | LLM inferisce lo schema da un campione anonimizzato |
-| **Promozione** | — | Il template Flow 2 approvato viene salvato e diventa Flow 1 |
-| **Auto-invalidazione** | Se il parse rate < 10%, lo schema viene eliminato e Flow 2 viene ritentato automaticamente | — |
-| **Costo LLM** | Zero (solo categorizzazione) | Una chiamata per classificazione + una per categorizzazione batch |
+Diagramma completo e Flow 1 vs Flow 2 → [docs/architecture.it.md](docs/architecture.it.md).
 
----
-
-## Struttura del progetto
+## Struttura del repository
 
 ```
-spendifai/
-├── app.py                  # Entry point Streamlit — onboarding gate + 9 pagine
-├── .env.example            # Template variabili d'ambiente
-├── pyproject.toml          # Dipendenze (uv / pip)
-│
-├── core/
-│   ├── models.py           # Enum: DocumentType, TransactionType, GirocontoMode …
-│   ├── schemas.py          # DocumentSchema (Pydantic) + invert_sign + llm_json_schema()
-│   ├── llm_backends.py     # LLMBackend ABC · Ollama · OpenAI · Claude · BackendFactory
-│   ├── sanitizer.py        # PII redaction (RF-10)
-│   ├── normalizer.py       # Encoding, parse_amount (Decimal), SHA-256, RF-03, RF-04
-│   ├── classifier.py       # Flow 2: inferenza DocumentSchema via LLM
-│   ├── categorizer.py      # Cascata 4-step + TaxonomyConfig (find_category_for_subcategory)
-│   └── orchestrator.py     # Pipeline principale: ProcessingConfig · process_file()
-│
-├── db/
-│   ├── models.py           # ORM SQLAlchemy (11 tabelle) + migrazioni automatiche
-│   ├── repository.py       # CRUD idempotente · persist_import_result() · CRUD tassonomia
-│   │                       #   bulk_set_giroconto_by_description()
-│   │                       #   get_transactions_by_rule_pattern()
-│   │                       #   seed_user_taxonomy_from_default()
-│   └── taxonomy_defaults.py  # Template tassonomia built-in (5 lingue: it/en/fr/de/es)
-│                              #   TAXONOMY_DEFAULTS · SUPPORTED_LANGUAGES
-│
-├── services/               # Facade layer — la UI importa solo da qui, mai da core.* o db.*
-│   ├── settings_service.py # SettingsService: CRUD impostazioni + tassonomia + conti + onboarding
-│   └── import_service.py   # ImportService: analisi file, pipeline, cache schema + re-export tipi
-│
-├── reports/
-│   ├── generator.py        # HTML (Jinja2+Plotly) · CSV · XLSX
-│   └── template_report.html.j2
-│
-├── ui/
-│   ├── onboarding_page.py  # Wizard primo avvio (4 step: lingua → titolari → conti → conferma)
-│   ├── sidebar.py          # Pulsanti navigazione (9 pagine) + modalità giroconto
-│   ├── upload_page.py      # Import multi-file + progress bar cross-session
-│   ├── registry_page.py    # Ledger filtrabile + selezione al click + bulk giroconto
-│   ├── analysis_page.py    # 7 grafici Plotly: barre mensili, saldo cumulativo,
-│   │                       #   pie+treemap spese, drill-down categoria, pie+treemap entrate,
-│   │                       #   top-10 descrizioni, stacked per conto + export HTML
-│   ├── review_page.py      # Correzione categoria + toggle giroconto + salvataggio regola
-│   ├── bulk_edit_page.py   # Operazioni massive: categoria/contesto/giroconto + eliminazione da filtro
-│   ├── rules_page.py       # CRUD completo regole + "Esegui tutte le regole" bulk re-categorizzazione
-│   ├── taxonomy_page.py    # CRUD DB-backed per categorie e sottocategorie
-│   ├── settings_page.py    # Locale, lingua, config LLM, expander reset tassonomia
-│   └── checklist_page.py   # Pivot mese × conto: checklist presenza transazioni
-│
-├── tools/
-│   ├── coupling_check.py   # Validatore accoppiamento architetturale (UI → services.* only)
-│   │                       #   --strict: applica baseline, usato in CI
-│   └── coupling_baseline.json  # Soglie max violazioni per file (attualmente tutte zero)
-│
-├── prompts/
-│   ├── classifier.json     # Prompt Flow 2 (hint invert_sign per file carta)
-│   └── categorizer.json    # Prompt categorizzazione transazioni
-│
-├── tests/
-│   ├── test_normalizer.py          # Test deterministici (parse_amount, SHA-256 …)
-│   ├── test_backends.py            # Factory backend, validazione, mock Ollama
-│   ├── test_categorizer.py         # Regole statiche, cascata, risoluzione tassonomia
-│   ├── test_repository_rules.py    # Upsert regole, pattern matching, toggle giroconto, bulk ops
-│   └── test_taxonomy_onboarding.py # Template multi-lingua + servizi onboarding (27 test)
-│
-└── support/
-    ├── formatting.py       # format_amount_display, format_date_display, format_raw_amount_display
-    └── logging.py
+sw_artifacts/
+├── app.py                  # Entry point Streamlit (onboarding gate + 14 pagine)
+├── core/                   # Pipeline: orchestrator, normalizer, classifier, categorizer, sanitizer, llm_backends
+├── services/               # Facade layer per l'UI; async runner; settings; import
+├── ui/                     # Pagine Streamlit + i18n + widgets
+├── db/                     # SQLAlchemy ORM, repository pattern, schema con auto-hash migrations
+├── api/                    # Endpoint REST FastAPI (opzionale)
+├── desktop/                # Launcher nativo (pywebview) + splash
+├── packaging/              # Build script: macos/, windows/, linux/, homebrew/, winget/
+├── docker/                 # Containerizzazione
+├── prompts/                # Template prompt LLM (JSON versionato)
+├── reports/                # Export HTML + CSV + XLSX
+├── tests/                  # Suite pytest (target coverage ≥ 90%)
+├── benchmark/              # Suite benchmark LLM (multi-provider)
+└── docs/                   # Documentazione utente e sviluppatore
 ```
 
----
+Dettagli → [docs/developer_guide.md](docs/developer_guide.md).
 
-## Installazione
+## 📚 Documentazione
 
-### ⚡ Installazione rapida (Docker — niente git clone)
-
-L'unico prerequisito è **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** installato e avviato.
-
-**Mac / Linux:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/drake69/spendifai/main/installer/install.sh | bash
-```
-
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/drake69/spendifai/main/installer/install.ps1 | iex
-```
-
-Lo script scarica l'immagine pre-compilata da GitHub Container Registry, avvia il container e apre il browser su **http://localhost:8501** automaticamente.
-
-> **AI locale opzionale:** l'installer chiede se aggiungere Ollama + `gemma3:12b` (scaricato automaticamente, ~8 GB). Compatibile con Apple Silicon (arm64) e amd64.
-
-> **Aggiornamento all'ultima versione:**
-> ```bash
-> docker compose --project-directory ~/spendifai pull && docker compose --project-directory ~/spendifai up -d
-> ```
-
-> **Disinstallazione:** `curl -fsSL https://raw.githubusercontent.com/drake69/spendifai/main/installer/uninstall.sh | bash`
-
----
-
-### 🖥️ App desktop nativa (no Docker, no Terminal)
-
-Installer one-click che scaricano il modello AI automaticamente e lanciano una finestra nativa:
-
-| Piattaforma | Comando |
-|-------------|---------|
-| **macOS** | `bash packaging/macos/install.sh` oppure `brew install --cask spendifai` |
-| **Windows** | `winget install SpendifAi.SpendifAi` oppure esegui `install.ps1` |
-| **Ubuntu/Debian** | `sudo apt install ./spendifai_*.deb` (build: `bash packaging/linux/build-deb.sh`) |
-| **Fedora/RHEL** | `sudo dnf install ./spendifai-*.rpm` (build: `bash packaging/linux/build-rpm.sh`) |
-
-> L'installer rileva l'hardware, scarica il modello LLM migliore per la RAM disponibile (1–7 GB) e configura llama.cpp — **zero intervento utente**. L'app gira in una finestra nativa (pywebview), senza Terminal né browser.
-
----
-
-### Installazione developer (nativa, consigliata su Mac)
-
-> Setup completo, convenzioni di codice, sistema di priorità e flusso PR → **[CONTRIBUTING.md](CONTRIBUTING.md)**
-
-### Prerequisiti
-
-- **Python 3.13+**
-- **[uv](https://github.com/astral-sh/uv)** (gestore pacchetti consigliato)
-- **[Ollama](https://ollama.com)** per il backend LLM locale (default)
-
-### 1. Clona il repository
-
-```bash
-git clone https://github.com/drake69/spendify.git
-cd spendifai
-```
-
-### 2. Installa le dipendenze
-
-```bash
-uv sync
-```
-
-### 3. Configura le variabili d'ambiente
-
-```bash
-cp .env.example .env
-# Nessuna modifica necessaria per un'installazione locale standard — percorsi già impostati
-```
-
-### 4. Scarica il modello LLM locale (opzionale)
-
-```bash
-ollama pull gemma3:12b   # ~8 GB — salta se hai intenzione di usare OpenAI/Anthropic
-```
-
-> Mantieni Ollama in esecuzione (`ollama serve`) durante l'uso dell'app. Backend LLM, modello e API key si configurano dalla pagina **⚙️ Impostazioni** — non nel `.env`.
-
----
-
-## Configurazione
-
-Il file `.env` contiene solo parametri infrastrutturali. Tutto il resto — backend LLM, chiavi API, modello, nomi titolari per PII redaction, formato data, lingua — è configurabile dalla pagina **⚙️ Impostazioni** e persiste nel DB:
-
-```dotenv
-# URI database — lascia invariato per uso locale; sovrascritto da docker-compose per Docker
-SPENDIFAI_DB=sqlite:///ledger.db
-```
-
-> **Nient'altro appartiene al `.env`.** Backend LLM, URL Ollama, nome modello, chiavi API OpenAI/Anthropic e nomi titolari sono tutti salvati nella tabella `user_settings` e modificabili live dall'UI senza riavviare l'app.
-
-### Modalità giroconto
-
-Configurabile dalla sidebar dell'app:
-
-| Modalità | Comportamento |
+| Argomento | Lingue |
 |---|---|
-| `neutral` | I giroconti restano nel ledger come `internal_out` / `internal_in` (default) |
-| `exclude` | I giroconti vengono rimossi dal registro (saldo netto non influenzato) |
+| Installazione e primo avvio | [EN](docs/installazione.en.md) · [IT](docs/installazione.md) |
+| Guida utente (ogni pagina) | [EN](docs/guida_utente.en.md) · [IT](docs/guida_utente.md) |
+| Reference guide (pipeline, tassonomia, RF-03/04) | [EN](docs/reference_guide.en.md) · [IT](docs/reference_guide.md) |
+| Architettura | [EN](docs/architecture.md) · [IT](docs/architecture.it.md) |
+| Design decisions | [EN](docs/design_decisions.md) · [IT](docs/design_decisions.it.md) |
+| Configurazione | [EN](docs/configurazione.en.md) · [IT](docs/configurazione.md) |
+| Developer guide | [EN](docs/developer_guide.en.md) · [IT](docs/developer_guide.md) |
+| Guida alla categorizzazione | [EN](docs/guida_classificazione.en.md) · [IT](docs/guida_classificazione.md) |
+| Schema database | [EN](docs/database.en.md) · [IT](docs/database.md) |
+| Deployment | [EN](docs/deployment.en.md) · [IT](docs/deployment.md) |
+| Processo di rilascio | [EN](docs/release_process.md) · [IT](docs/release_process.it.md) |
+| Contribuire | [EN](CONTRIBUTING.en.md) · [IT](CONTRIBUTING.md) |
+| Politica di sicurezza | [EN](SECURITY.md) · [IT](SECURITY.it.md) |
+| Changelog | [EN](CHANGELOG.md) · [IT](CHANGELOG.it.md) |
 
-### Privacy e backend remoti
+## Contribuire
+
+Segnalazioni di bug, idee di feature e PR sono benvenute. Vedi [CONTRIBUTING.md](CONTRIBUTING.md) per workflow, policy di branching, framework delle priorità e gate CI.
+
+## Licenza
+
+**PolyForm Noncommercial 1.0.0** — vedi [LICENSE](LICENSE). Uso personale libero; l'uso commerciale richiede una licenza separata.
+
+---
+
+### Cosa lascia la macchina — onestà
+
+Tutti i dati finanziari sono memorizzati localmente in `~/.spendifai/ledger.db`.
+
+**Backend LLM locale (default — llama.cpp, Ollama)**: nulla lascia la macchina.
+
+**Backend LLM remoto (opt-in — OpenAI, Claude)**: il payload contiene
+descrizioni sanitizzate **insieme a** **importi**, **date** e **metadati
+delle colonne**.
+
+#### Esempio di redazione — categorizer (`core/categorizer.py:303`)
+
+Riga grezza della transazione dal CSV:
 
 ```
-[LOCAL — default]  Ollama locale: nessun dato esce dal processo.
-                   Nessuna sanitizzazione richiesta.
-
-[REMOTE — opt-in]  OpenAI / Claude: PII sanitization OBBLIGATORIA.
-                   IBAN → <ACCOUNT_ID>  |  PAN → <CARD_ID>
-                   CF   → <FISCAL_ID>  |  owner → <OWNER>
-                   Chiamata bloccata se assert_sanitized() fallisce.
+date:        2026-03-15
+description: "BONIFICO da MARIO ROSSI IT60X0542811101000000123456 CAU 12345 STIPENDIO MENSILE"
+amount:      1500.00
 ```
 
----
+Cosa l'LLM remoto riceve effettivamente:
 
-## Avvio
-
-```bash
-# Con uv
-uv run streamlit run app.py
-
-# Oppure
-streamlit run app.py
+```json
+{
+  "amount": "1500.00",
+  "description": "BONIFICO da Carlo Brambilla <ACCOUNT_ID> <TX_CODE> STIPENDIO MENSILE"
+}
 ```
 
-Al **primo avvio** appare automaticamente il wizard di onboarding (4 step: lingua, nomi titolari, conti, conferma). Le installazioni esistenti con dati già nella tassonomia vengono rilevate automaticamente e saltano il wizard.
-
-L'app si apre su `http://localhost:8501` con 9 pagine:
-
-| Pagina | Descrizione |
-|---|---|
-| **📥 Import** | Carica uno o più file (CSV / XLSX). Progresso live visibile da tutte le sessioni browser. Riepilogo: transazioni, riconciliazioni, transfer link, flow usato (1/2). |
-| **📋 Ledger** | Tabella filtrabile per data, tipo, descrizione, categoria, contesto, flag revisione. Click su una riga per selezionarla istantaneamente. Colonne Entrata/Uscita separate e allineate a destra. Filtro contesto + pannello assegnazione con suggerimenti Jaccard. Toggle giroconto con bulk-apply. Download CSV/XLSX. |
-| **✏️ Modifiche massive** | Operazioni in blocco su transazione di riferimento: toggle giroconto, assegnazione contesto (con similarità Jaccard), correzione categoria + salvataggio regola. Eliminazione massiva tramite filtri combinati (data, conto, tipo, descrizione, categoria) con anteprima e conferma `ELIMINA` obbligatoria. |
-| **📊 Analytics** | 7 grafici Plotly interattivi: barre mensili entrate/uscite, saldo cumulativo, pie+treemap spese per categoria, drill-down interattivo categoria→sottocategoria con trend mensile, pie+treemap entrate, top-10 descrizioni, stacked per conto. Export HTML. |
-| **🔍 Review** | Transazioni con `to_review=True`. Toggle giroconto (con bulk-apply). Correzione categoria/sottocategoria + salvataggio opzionale come regola permanente applicata immediatamente. Pulsante "Re-run LLM" per transazioni non pulite. Pulsante "Riesegui giroconti cross-account". |
-| **📏 Regole** | CRUD completo regole di categorizzazione. Modifica/elimina regole + ricalcolo bulk delle transazioni già categorizzate. Pulsante "▶️ Esegui tutte le regole" applica tutte le regole a ogni transazione del ledger in un colpo. |
-| **🗂️ Tassonomia** | CRUD DB-backed per categorie e sottocategorie (spese e entrate). Le modifiche hanno effetto immediato senza restart. |
-| **⚙️ Impostazioni** | Formato data, separatori importo, lingua descrizioni, contesti di vita, lista conti bancari, backend LLM (modello + chiavi API). Tutto persistito nel DB. |
-| **✅ Check List** | Tabella pivot mese × conto. Mese corrente in cima, ordine decrescente. Celle: numero tx o **—** se assenti. Colorazione per volume. Filtri: selezione conti, ultimi N mesi, nascondi mesi vuoti. Export CSV. |
-
----
-
-## Tassonomia
-
-La tassonomia è memorizzata nel database (tabelle `taxonomy_category` / `taxonomy_subcategory`) e gestita dalla pagina **🗂️ Tassonomia**.
-
-### Template multi-lingua built-in
-
-La tabella `taxonomy_default` contiene template immutabili in 5 lingue — Italiano, Inglese, Francese, Tedesco, Spagnolo. Vengono popolati da `db/taxonomy_defaults.py` al primo avvio (nessun file YAML). Durante l'onboarding l'utente seleziona la lingua e il template viene copiato nella tassonomia utente.
-
-Per reimpostare la tassonomia su una lingua diversa in qualsiasi momento: **⚙️ Impostazioni → 🔄 Reset tassonomia**.
-
-### Tassonomia di default (Italiano)
-
-**Categorie di spesa (15):** Casa · Alimentari · Ristorazione · Trasporti · Salute · Istruzione · Abbigliamento · Comunicazioni · Svago e tempo libero · Animali domestici · Finanza e assicurazioni · Cura personale · Tasse e tributi · Regali e donazioni · Altro
-
-**Categorie di entrata (7):** Lavoro dipendente · Lavoro autonomo · Rendite finanziarie · Rendite immobiliari · Trasferimenti e rimborsi · Prestazioni sociali · Altro entrate
-
-**La sottocategoria è la fonte di verità:** se LLM o una regola assegnano una sottocategoria presente in tassonomia, la categoria genitore corretta viene risolta automaticamente — i due livelli sono sempre consistenti nel DB.
-
----
-
-## Motore delle regole
-
-Le regole di categorizzazione sono memorizzate nella tabella `category_rule` e applicate in più punti del ciclo di vita.
-
-### Tipi di matching
-
-| Tipo | Comportamento |
-|---|---|
-| `contains` | Il pattern appare ovunque nella descrizione (case-insensitive) |
-| `exact` | La descrizione corrisponde esattamente al pattern (case-insensitive) |
-| `regex` | Regex Python completa confrontata con la descrizione |
-
-`get_transactions_by_rule_pattern` ricerca **tutte** le transazioni indipendentemente da come erano state categorizzate (LLM, regola o correzione manuale). Salvare una nuova regola corregge correttamente anche le transazioni già categorizzate dall'LLM.
-
-### Priorità
-
-Quando più regole corrispondono alla stessa transazione vince quella con il valore di `priority` più alto. La priorità di default è 10; è possibile assegnare qualsiasi intero.
-
-### Semantica upsert
-
-Creare una regola con la stessa coppia `(pattern, match_type)` di una regola esistente la **aggiorna** sul posto (categoria, sottocategoria, priorità) anziché creare un duplicato.
-
-### Applicazione retroattiva
-
-Salvare una regola dalle pagine **Ledger** o **Review** la applica immediatamente a tutte le transazioni esistenti che corrispondono al pattern, non solo alle future importazioni. Il messaggio di conferma indica quante transazioni sono state aggiornate. Lo stesso comportamento è disponibile dalla pagina **Regole** tramite l'opzione di ricalcolo bulk su singola regola.
-
-Inoltre, il pulsante **▶️ Esegui tutte le regole** nella pagina **Regole** applica tutte le regole a ogni transazione del ledger in un colpo solo (non limitato a `to_review=True`). Utile dopo aver creato più regole contemporaneamente o dopo aver importato dati storici.
-
----
-
-## Giroconti
-
-Un *giroconto* è un movimento interno tra conti di propria titolarità (es. bonifico da conto corrente a conto deposito, ricarica di una prepagata). Includere entrambi i lati nel saldo causerebbe double-counting.
-
-### Tipi di transazione
-
-| `tx_type` | Significato |
-|---|---|
-| `internal_out` | Lato uscente del giroconto (importo negativo) |
-| `internal_in` | Lato entrante del giroconto (importo positivo) |
-
-Entrambi i tipi sono esclusi dal saldo netto, dalle entrate e dalle uscite.
-
-### Rilevamento automatico (RF-04)
-
-La pipeline tenta di abbinare i giroconti automaticamente durante l'importazione con tre passaggi:
-
-1. **Regex keyword** — la descrizione corrisponde a un pattern configurato (es. "Giroconto", "Bonifico tra i miei conti") → alta confidenza
-2. **Matching importo + data** — stesso importo assoluto entro ±3 giorni, su `account_label` diversi → confidenza media/alta
-3. **Permutazioni nome titolare** — la descrizione contiene qualsiasi permutazione dei token del nome del titolare → alta confidenza (intercetta sia "Corsaro Luigi Gerotti Elena" che "Luigi Corsaro Elena Gerotti")
-
-### Riesecuzione cross-account
-
-Quando le due transazioni di un giroconto appartengono a file importati in momenti diversi, il primo import non può trovare la coppia. Usa il pulsante **"🔁 Riesegui rilevamento giroconti"** nella pagina **🔍 Review** per rieseguire il rilevamento globalmente su tutte le transazioni non-giroconto.
-
-### Toggle manuale
-
-Dalle pagine **Ledger** o **Review** è possibile contrassegnare manualmente qualsiasi transazione come giroconto (o ripristinarla):
-
-- **Toggle singolo** — cambia il `tx_type` della transazione selezionata (`expense` ↔ `internal_out`, `income` ↔ `internal_in`).
-- **Bulk apply** — se altre transazioni condividono la stessa descrizione, una checkbox (default: abilitata) consente di applicare la stessa modifica a tutte con un solo click. Il numero di transazioni coinvolte è visibile prima di confermare.
-
-`bulk_set_giroconto_by_description` in `db/repository.py` implementa l'operazione bulk: aggiorna tutte le transazioni con la descrizione indicata eccetto quella già modificata, e restituisce il numero di righe cambiate.
-
----
-
-## Contesti di vita
-
-I contesti di vita sono una dimensione di classificazione ortogonale alla tassonomia delle categorie. Mentre la categoria risponde *cosa è stato acquistato*, il contesto risponde *per quale area della vita*.
-
-### Design
-
-| Aspetto | Dettaglio |
-|---|---|
-| **Storage** | Colonna `context VARCHAR(64)` nullable sulla tabella `Transaction` |
-| **Ortogonalità** | Indipendente da categoria/sottocategoria — qualsiasi combinazione è valida |
-| **Configurabile** | Aggiunta, rinomina e rimozione contesti dalla pagina **⚙️ Impostazioni** (salvati come JSON in `user_settings`) |
-| **Contesti default** | Quotidianità · Lavoro · Vacanza |
-
-### Assegnazione
-
-Dalla pagina **📋 Ledger**, seleziona una transazione e apri il pannello espandibile "🌍 Assegna contesto":
-
-1. Scegli un contesto dal menu a discesa (o cancella quello esistente)
-2. Attiva opzionalmente **"Applica anche a transazioni simili"** — la similarità Jaccard a livello di token (soglia 0.35) trova transazioni con descrizione semanticamente vicina e pre-assegna lo stesso contesto
-3. Clicca **Applica**
-
-### Filtro
-
-La barra filtri del registro include un selettore contesto: *tutti*, i singoli valori configurati, o *— nessuno —* (transazioni senza contesto assegnato).
-
----
-
-## Test
-
-```bash
-# Tutti i test (nessun mock LLM richiesto)
-uv run python -m pytest tests/ -v
-
-# Con coverage
-uv run python -m pytest tests/ --cov=core --cov=db --cov-report=term-missing
-```
-
-### File di test
-
-| File | Copertura |
-|---|---|
-| `test_normalizer.py` | `parse_amount`, dedup SHA-256, encoding detection |
-| `test_backends.py` | Factory backend, validazione, mock Ollama |
-| `test_categorizer.py` | Regole statiche, cascata 4-step, risoluzione tassonomia |
-| `test_repository_rules.py` | Upsert regole, `get_transactions_by_rule_pattern` (tutti i tipi + regressione LLM-sourced), `apply_rules_to_review_transactions`, `toggle_transaction_giroconto`, `bulk_set_giroconto_by_description` |
-| `test_taxonomy_onboarding.py` | Struttura `TAXONOMY_DEFAULTS` (5 lingue), migrazione `taxonomy_default` (seeding + idempotenza), metodi onboarding di `SettingsService`, auto-skip per utenti esistenti |
-
-Tutti i test usano un database SQLite in-memory — nessun I/O su file, nessun servizio esterno richiesto.
-
----
-
-## Decisioni di design
-
-### `Decimal` — mai `float`
-
-Tutti gli importi sono `decimal.Decimal`. I float IEEE 754 introducono errori di arrotondamento che falsano saldi e riconciliazioni.
-
-### Idempotenza SHA-256
-
-Ogni transazione ha un `id` di 24 caratteri (SHA-256 troncato) calcolato deterministicamente da `(source_file, date, amount, description)`. Re-importare lo stesso file non genera duplicati.
-
-### Correzione segno carta (`invert_sign`)
-
-I file movimenti italiani per carte di credito/debito esportano spesso gli acquisti come valori positivi. Il flag `DocumentSchema.invert_sign`, impostato dall'LLM durante la classificazione Flow 2, istruisce il normalizzatore a negare tutti gli importi — le spese diventano negative e i rimborsi positivi con un'unica operazione simmetrica.
-
-#### Algoritmo di rilevamento in due passi
-
-Il classificatore decide il valore di `invert_sign` con un algoritmo in due passi. **Lo Step 0 ha la priorità massima: se si attiva, lo Step 1 viene saltato completamente.** Lo Step 1 è consultato solo quando lo Step 0 non riesce a dare una risposta definitiva.
-
-**Step 0 — Sinonimi del nome colonna (priorità massima)**
-
-Il nome della colonna importo viene confrontato con tre gruppi di sinonimi:
-
-| Gruppo | Esempi di nomi | Decisione |
-|---|---|---|
-| **Sinonimi di uscita** | Uscita, Uscite, Addebito, Addebiti, Pagamento, Spesa, Dare, Importo addebitato | `invert_sign = true` (spese salvate come positivi → negarle) |
-| **Sinonimi di entrata** | Entrata, Entrate, Accredito, Accrediti, Avere, Credito, Importo accreditato | `invert_sign = false` (entrate già positive → nessuna modifica) |
-| **Nomi neutri** | Importo, Amount, Valore, Totale | Nessuna decisione — si procede allo Step 1 |
-
-Il matching è case-insensitive e parziale (es. "Addebiti carta" corrisponde a "Addebito"). La regola dei sinonimi di uscita si applica solo ai doc_type carta; conti correnti e depositi mantengono sempre `invert_sign = false` indipendentemente dal nome della colonna.
-
-**Step 1 — Analisi della distribuzione dei segni (solo nomi neutri)**
-
-Quando lo Step 0 trova un nome neutro e non può classificare per nome, il classificatore conta i valori positivi e negativi nel campione e calcola `positive_ratio` e `negative_ratio`:
-
-- File carta, maggioranza positivi (> 60 %): le spese sono salvate come positivi (convenzione AMEX / tipici export italiani) → `invert_sign = true`
-- File carta, maggioranza negativi (> 60 %): le spese hanno già il segno corretto → `invert_sign = false`
-- Split circa 50/50: si analizzano le descrizioni (nomi di esercenti con importi positivi → `invert_sign = true`; "bonifico ricevuto" con importo positivo → `invert_sign = false`)
-- Conto corrente / deposito: sempre `invert_sign = false`, indipendentemente dalla distribuzione
-
-#### Campi diagnostici
-
-Ogni `DocumentSchema` prodotto dal Flow 2 include quattro campi diagnostici per audit e debug:
-
-| Campo | Tipo | Contenuto |
-|---|---|---|
-| `positive_ratio` | `float \| null` | Frazione di valori > 0 nella colonna importo nel campione |
-| `negative_ratio` | `float \| null` | Frazione di valori < 0 nella colonna importo nel campione |
-| `semantic_evidence` | `list[str]` | 2–4 frasi brevi dell'LLM che spiegano la decisione |
-| `normalization_case_id` | `str \| null` | C1 = conto corrente signed_single · C2 = carta invertita · C3 = carta già negativa · C4 = colonne Dare/Avere · C5 = ambiguo |
-
-Questi campi sono persistiti nella tabella DB `document_schema` e visibili nel riepilogo dello schema Flow 2 nell'UI.
-
-### Sottocategoria come chiave primaria
-
-Il categorizzatore tratta la sottocategoria come autoritativa. `TaxonomyConfig.find_category_for_subcategory()` risolve la categoria genitore da qualsiasi nome di sottocategoria valido. LLM e regole possono specificare il livello più granulare e la gerarchia è sempre consistente nel DB.
-
-### Tassonomia nel DB
-
-La tassonomia a 2 livelli (categorie + sottocategorie) risiede in due tabelle DB (`taxonomy_category`, `taxonomy_subcategory`). Al primo avvio il wizard di onboarding copia il template della lingua scelta dalla tabella immutabile `taxonomy_default` nella tassonomia utente. Nessun file YAML. Le modifiche successive sono gestite interamente dall'UI — nessun restart richiesto.
-
-### PII sanitization come precondizione
-
-`assert_sanitized()` è chiamata in `call_with_fallback()` prima di qualsiasi richiesta a backend remoto. Se il testo contiene pattern IBAN/PAN/CF rilevabili, la chiamata viene rifiutata — non degradata silenziosamente.
-
-### Circuit breaker e quarantena
-
-`call_with_fallback(primary, ...)` prova il backend primario, poi Ollama locale come fallback. Se entrambi falliscono, la transazione riceve `to_review=True` e viene messa in coda senza bloccare il resto del batch.
-
-### Nessun LangChain
-
-I backend LLM usano direttamente `openai` SDK, `anthropic` SDK e `requests` (per Ollama). Nessuna dipendenza da framework di orchestrazione LLM.
-
-### RF-03: algoritmo a 3 fasi
-
-La riconciliazione carta–conto corrente usa: (1) finestra temporale ±45 giorni, (2) sliding window contigua (gap ≤ 5 giorni, O(n²)), (3) subset sum al boundary (k=10 tx, ~10⁶ operazioni).
-
----
-
-## Dipendenze principali
-
-| Pacchetto | Versione | Scopo |
-|---|---|---|
-| `streamlit` | ≥ 1.35 | UI |
-| `pandas` | ≥ 2.2 | Elaborazione dati |
-| `sqlalchemy` | ≥ 2.0 | ORM / persistenza |
-| `pydantic` | ≥ 2.0 | Validazione schemi |
-| `openai` | ≥ 1.30 | Backend OpenAI |
-| `anthropic` | ≥ 0.28 | Backend Claude |
-| `requests` | ≥ 2.31 | Backend Ollama |
-| `chardet` | ≥ 5.0 | Encoding detection |
-| `plotly` | ≥ 5.20 | Grafici |
-| `jinja2` | ≥ 3.1 | Template report HTML |
-| `pyyaml` | ≥ 6.0 | Parsing seed taxonomy.yaml |
-| `pytest` | ≥ 8.0 | Test |
-
----
-
-*Tutti i dati sono salvati localmente nel database SQLite (`ledger.db`). Nessuna informazione finanziaria viene trasmessa a servizi esterni salvo esplicita configurazione del backend remoto e sanitizzazione PII obbligatoria.*
+Cosa è cambiato:
+- `MARIO ROSSI` (nome titolare configurato) → `Carlo Brambilla` (nome finto dal pool italiano, ripristinato dopo la risposta LLM)
+- `IT60X...` (IBAN) → `<ACCOUNT_ID>`
+- `CAU 12345` (codice transazione bancaria) → `<TX_CODE>`
+- `amount` e metadati di data: **inviati in chiaro**
+
+Il prompt del categorizer dice al modello di "basare la decisione su
+descrizione, importo e contesto" (`prompts/categorizer.json`). Se
+l'importo influisca davvero sull'accuracy in pratica non è stato
+misurato contro una baseline senza importi — il default conservativo
+lo lascia nel payload finché non sarà misurato.
+
+#### Roadmap
+
+Le modalità di redazione di importi e date per i backend remoti
+(`none` / `buckets` / `strip`) sono in roadmap — item di backlog **AI-55**.

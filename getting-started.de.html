@@ -50,6 +50,11 @@
     .step-img img { max-width: 100%; max-height: 100%; border-radius: 8px; }
     .step-img .ph { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
     .step-img .ph code { background: var(--bg); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+.features-list { list-style: none; padding: 0; margin: 1.5rem 0 0 0; }
+    .features-list li { padding: 1rem 1.2rem; background: var(--surface); border-radius: 8px; margin-bottom: 0.75rem; border-left: 3px solid var(--blue); color: var(--muted); }
+    .features-list li strong { color: var(--text); }
+    .features-list li .beta-tag { color: var(--orange); font-weight: 600; font-size: 0.85rem; margin-left: 0.3rem; }
+    .features-list li .beta-note { color: var(--muted); font-size: 0.85rem; font-style: italic; display: block; margin-top: 0.3rem; }
     .note { background: var(--surface); border-left: 4px solid var(--orange); padding: 1rem 1.2rem; border-radius: 6px; margin: 1.5rem 0; }
     .note strong { color: var(--orange); }
     footer { border-top: 1px solid var(--border); padding: 2rem 1.5rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
@@ -61,6 +66,7 @@
     <div class="nav-inner">
       <div class="nav-brand"><a href="/">Spendif.ai</a></div>
       <div class="nav-links">
+        <a href="#what-you-get">Was du bekommst</a>
         <a href="#download">Herunterladen</a>
         <a href="#install">Installation</a>
         <a href="#first-launch">Erster Start</a>
@@ -76,6 +82,18 @@
 
   <div class="wrap">
 
+
+    <section id="what-you-get">
+      <h2><span class="step-num" style="background:var(--green)">✨</span>Was du bekommst</h2>
+      <ul class="features-list">
+        <li><strong>Importiert CSV/XLSX jeder Bank</strong> — erkennt das Format automatisch, kein manuelles Mapping</li>
+        <li><strong>KI-Kategorisierung, vollständig offline</strong> — lokales LLM enthalten, keine Cloud nötig</li>
+        <li><strong>Lokale KI als Standard</strong> — Daten bleiben auf deinem Rechner; Remote-LLM ist opt-in und schwärzt IBAN / Karten / Inhaber-Namen (Beträge und Daten reisen weiterhin — siehe Roadmap)</li>
+        <li><strong>Fünf Sprachen</strong> — Italienisch, Englisch, Französisch, Deutsch, Spanisch</li>
+        <li><strong>Karten-Konto-Abgleich</strong> <span class="beta-tag">(beta)</span> — verknüpft Kartenabrechnungen mit den zugrundeliegenden Ausgaben, um Doppelzählung zu vermeiden<span class="beta-note">(Edge Cases werden noch verfeinert)</span></li>
+        <li><strong>Erkennung interner Überweisungen</strong> <span class="beta-tag">(beta)</span> — gleicht Überweisungen zwischen deinen eigenen Konten ab, damit sie die Dashboards nicht verfälschen<span class="beta-note">(Edge Cases werden noch verfeinert)</span></li>
+      </ul>
+    </section>
     <section id="download">
       <h2><span class="step-num">1</span>Für dein System herunterladen</h2>
       <p>Die offiziellen Installer werden als Assets jedes <a href="https://github.com/drake69/spendify/releases/latest" target="_blank">GitHub Release</a> veröffentlicht. Wähle das passende Format für dein Betriebssystem.</p>
