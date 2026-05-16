@@ -301,15 +301,41 @@ def _download_from_hf(
     dest: Path,
     progress_callback: Callable[[float], None] | None = None,
 ) -> None:
-    """Download a single file from HuggingFace Hub."""
+    """Download a single file from HuggingFace Hub.
+
+    `hf_hub_download` uses an internal `tqdm` progress bar to report download
+    progress to stdout. To surface that progress to our caller (the desktop
+    launcher's status file consumer), we hand `hf_hub_download` a custom
+    `tqdm` subclass whose `update()` fires the caller's callback after every
+    chunk. Without this hook the caller would only see a single `1.0` at the
+    very end — useless for any UX that wants live ETA.
+    """
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
         from huggingface_hub import hf_hub_download
         try:
-            from tqdm.auto import tqdm as tqdm_cls
+            from tqdm.auto import tqdm as _tqdm_base
         except ImportError:
-            tqdm_cls = None
+            _tqdm_base = None
+
+        if _tqdm_base is not None and progress_callback is not None:
+            class _CallbackTqdm(_tqdm_base):  # type: ignore[misc, valid-type]
+                """tqdm subclass that propagates each update to our callback."""
+
+                def update(self, n=1):
+                    ret = super().update(n)
+                    try:
+                        if self.total:
+                            progress_callback(min(1.0, self.n / self.total))
+                    except Exception:
+                        # Never let a UI hiccup kill the download.
+                        pass
+                    return ret
+
+            tqdm_cls = _CallbackTqdm
+        else:
+            tqdm_cls = _tqdm_base
 
         # hf_hub_download handles caching, resume, etc.
         downloaded = hf_hub_download(

@@ -147,7 +147,12 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=True,
     upx=False,
-    console=False,  # --windowed
+    # console=False is the production setting for a polished desktop app, but
+    # it routes stdout/stderr to /dev/null on macOS — any crash before the
+    # webview window appears becomes invisible. Use console=True until the
+    # launcher is fully stabilised so we always see Python tracebacks. The
+    # persistent log file in desktop/launcher.py covers production use anyway.
+    console=True,
     icon=icon_path,
 )
 

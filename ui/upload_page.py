@@ -1,11 +1,35 @@
 """Import page (RF-08): upload files, run pipeline, show summary."""
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+
+def _ai_model_still_downloading() -> bool:
+    """Read ``~/.spendifai/model_download.status`` and return True if the
+    desktop launcher is mid-download.
+
+    Returns False (don't block) when the file is absent — that's the
+    normal case for installs without the desktop bundle (Docker, source).
+    """
+    status_file = Path.home() / ".spendifai" / "model_download.status"
+    if not status_file.exists():
+        return False
+    try:
+        data = json.loads(status_file.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if data.get("done"):
+        return False
+    if data.get("error"):
+        return False  # error → not "still downloading", surface elsewhere
+    pct = float(data.get("pct", 0.0))
+    return pct < 1.0
 
 from services.import_service import (
     Confidence,
@@ -397,6 +421,18 @@ def render_upload_page(engine):
     # Guard: owner names must be configured before any import
     if not import_svc.get_owner_names():
         st.error(t_fn("upload.owner_names_missing"))
+        return
+
+    # Guard: the AI model must be present before we can import & categorise.
+    # The desktop launcher downloads it in the background on first run; until
+    # it's done, surface a clear "please wait" instead of letting the user
+    # upload and then watch the LLM call fail.
+    if _ai_model_still_downloading():
+        st.warning(
+            "⏳ Il modello AI è ancora in download (vedi il banner in alto). "
+            "L'Import sarà disponibile non appena sarà pronto — di solito 3-15 minuti al primo avvio.",
+            icon="📚",
+        )
         return
 
     # Check for an active running job before rendering the form.

@@ -11,24 +11,112 @@ The same entry point is used by the PyInstaller-built .app / .exe.
 """
 from __future__ import annotations
 
+import sys
+
+# ---------------------------------------------------------------------------
+# Re-execution guard (PyInstaller bundle only)
+# ---------------------------------------------------------------------------
+# When frozen, `sys.executable` is the SpendifAi binary itself. If the
+# launcher does `subprocess.Popen([sys.executable, "-m", "streamlit", ...])`
+# the child re-enters launcher.py and would open a *second* pywebview
+# window (and a third, fourth…). Detect the `-m <module>` invocation at the
+# very top of the file — before any heavy import or log redirect — and
+# forward to the requested module's CLI, then exit.
+if getattr(sys, "frozen", False) and len(sys.argv) >= 3 and sys.argv[1] == "-m":
+    _mod = sys.argv[2]
+    # Re-shape argv so the dispatched module sees `argv = [<mod>, …rest]`.
+    sys.argv = [_mod] + sys.argv[3:]
+    if _mod == "streamlit":
+        from streamlit.web.cli import main as _st_main
+        _st_main()
+    else:
+        import runpy
+        runpy.run_module(_mod, run_name="__main__", alter_sys=True)
+    sys.exit(0)
+
 import atexit
 import os
 import signal
 import socket
 import subprocess
-import sys
 import time
+import traceback
 from pathlib import Path
 from threading import Thread
 
-import webview  # pywebview
+# ---------------------------------------------------------------------------
+# Persistent logging — REDIRECT STDOUT/STDERR TO A FILE BEFORE ANY OTHER WORK
+# ---------------------------------------------------------------------------
+# Rationale: in the PyInstaller `--windowed` bundle (console=False) stdout
+# and stderr are routed to /dev/null on macOS. Any crash before the webview
+# window is shown is then completely invisible — no stack trace anywhere,
+# no crash report (Python exceptions are not native crashes).
+#
+# We redirect both streams to a per-user log file BEFORE importing anything
+# heavy that could blow up at import time (e.g. webview, streamlit deps),
+# so even a `ModuleNotFoundError` or `ImportError` is captured. The file is
+# truncated on every launch — it's a diagnostic log, not an audit trail.
+
+_LOG_DIR = Path.home() / "Library" / "Logs" if sys.platform == "darwin" else Path.home() / ".spendifai"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_LOG_FILE = _LOG_DIR / "spendifai-launcher.log"
+
+try:
+    _log_fh = open(_LOG_FILE, "w", buffering=1, encoding="utf-8")  # line-buffered
+    sys.stdout = _log_fh
+    sys.stderr = _log_fh
+    # First line so we can `tail -f` and verify the redirect worked.
+    print(f"=== Spendif.ai launcher boot — {time.strftime('%Y-%m-%d %H:%M:%S')} ===", flush=True)
+    print(f"argv: {sys.argv}", flush=True)
+    print(f"executable: {sys.executable}", flush=True)
+    print(f"frozen (PyInstaller): {getattr(sys, 'frozen', False)}", flush=True)
+    print(f"_MEIPASS: {getattr(sys, '_MEIPASS', None)}", flush=True)
+except Exception as _e:
+    # If we can't even open the log file, write a marker beside the user home.
+    # This is the last resort before truly silent failure.
+    try:
+        with open(Path.home() / "spendifai-launcher-bootstrap-error.txt", "w") as _e_fh:
+            _e_fh.write(f"could not open log file: {_e}\n")
+    except Exception:
+        pass
+
+try:
+    import webview  # pywebview
+    print(f"imported webview from: {getattr(webview, '__file__', '?')}", flush=True)
+except Exception:
+    print("FATAL: import webview failed", flush=True)
+    traceback.print_exc()
+    raise
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
 _SPENDIFAI_HOME = Path.home() / ".spendifai"
-_SPLASH_HTML = Path(__file__).parent / "splash.html"
+
+
+def _resolve_splash_html() -> Path:
+    """Find splash.html across the two layouts.
+
+    - Source mode: `desktop/launcher.py` next to `desktop/splash.html`.
+    - PyInstaller bundle: launcher.py is the top-level script, so
+      `Path(__file__).parent` collapses to `_MEIPASS` and splash.html is
+      then under `_MEIPASS/desktop/splash.html`.
+    """
+    candidates = [
+        Path(__file__).parent / "splash.html",                 # source / dev
+        Path(getattr(sys, "_MEIPASS", "")) / "desktop" / "splash.html",  # bundle
+        Path(__file__).parent / "desktop" / "splash.html",     # safety net
+    ]
+    for c in candidates:
+        if c and c.exists():
+            return c
+    # If none exist we still return the first one so the rest of the code
+    # can fail predictably with a clear log line rather than crashing.
+    return candidates[0]
+
+
+_SPLASH_HTML = _resolve_splash_html()
 
 
 def _resolve_app_dir() -> Path:
@@ -84,46 +172,28 @@ def _wait_for_port(port: int, timeout: float = 30.0) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# First-run setup: model download + .env configuration
+# First-run setup
 # ---------------------------------------------------------------------------
+# Split into two phases:
+#   1. _bootstrap_env() — synchronous, super fast. Creates ~/.spendifai/,
+#      writes a minimal .env so Streamlit can start (DB path + LLM backend
+#      placeholder). Must run BEFORE Streamlit subprocess so app.py can
+#      load_dotenv() without surprises.
+#   2. _download_model_bg() — runs in a daemon thread. Downloads the
+#      recommended GGUF, writes progress (with ETA) to a status file the
+#      Streamlit UI polls, and updates .env with LLAMA_CPP_MODEL_PATH on
+#      completion. The wizard / app keep running in parallel.
 
-def _ensure_first_run_setup(
-    app_dir: Path,
-    window: webview.Window | None = None,
-) -> None:
-    """Download the recommended LLM model and write .env if needed.
+_MODEL_STATUS_FILE = _SPENDIFAI_HOME / "model_download.status"
 
-    On first launch ``~/.spendifai/models/`` is empty; this function calls
-    the existing ``ensure_model_available()`` which downloads the best GGUF
-    model for the detected hardware.  Progress is relayed to the splash
-    screen via the pywebview JS bridge.
-    """
-    # Make sure the home dir exists
+
+def _bootstrap_env(app_dir: Path) -> None:
+    """Synchronous bootstrap — fast. Makes Streamlit startable immediately."""
     _SPENDIFAI_HOME.mkdir(parents=True, exist_ok=True)
-
-    # Add app_dir to sys.path so we can import core/config modules
     app_str = str(app_dir)
     if app_str not in sys.path:
         sys.path.insert(0, app_str)
 
-    def _js(call: str) -> None:
-        if window:
-            try:
-                window.evaluate_js(call)
-            except Exception:
-                pass
-
-    # Import from the app itself
-    from core.model_manager import ensure_model_available  # noqa: E402
-
-    def _on_progress(pct: float, msg: str) -> None:
-        _js(f"updateStatus({msg!r})")
-        _js(f"updateProgress({pct})")
-
-    _js("updateStatus('Checking AI model...')")
-    model_path = ensure_model_available(progress_callback=_on_progress)
-
-    # Write / update .env so the Streamlit app uses llama.cpp by default
     env_file = app_dir / ".env"
     env_lines: list[str] = []
     if env_file.exists():
@@ -137,17 +207,98 @@ def _ensure_first_run_setup(
         env_lines.append(f"{key}={value}")
 
     _set_env("LLM_BACKEND", "local_llama_cpp")
-    if model_path:
-        _set_env("LLAMA_CPP_MODEL_PATH", model_path)
-    _set_env(
-        "SPENDIFAI_DB",
-        f"sqlite:///{_SPENDIFAI_HOME / 'ledger.db'}",
-    )
-
+    _set_env("SPENDIFAI_DB", f"sqlite:///{_SPENDIFAI_HOME / 'ledger.db'}")
     env_file.write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+    print(f"_bootstrap_env: wrote .env at {env_file}", flush=True)
 
-    _js("hideProgress()")
-    _js("updateStatus('Starting application...')")
+
+def _write_status(payload: dict) -> None:
+    """Atomic write of the model-download status file (UI polls this)."""
+    import json
+    tmp = _MODEL_STATUS_FILE.with_suffix(".status.tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    tmp.replace(_MODEL_STATUS_FILE)
+
+
+def _download_model_bg(app_dir: Path) -> None:
+    """Background thread: download the LLM model, update status + .env.
+
+    Writes ``~/.spendifai/model_download.status`` continuously so the
+    Streamlit UI can show a live ETA banner. On success, updates
+    ``LLAMA_CPP_MODEL_PATH`` in .env. On failure, writes an error status.
+    """
+    import json
+    start = time.monotonic()
+    print("_download_model_bg: starting", flush=True)
+
+    def progress_cb(pct: float, msg: str = "") -> None:
+        elapsed = time.monotonic() - start
+        eta_remaining = None
+        # Estimate ETA only when pct is meaningful (≥2%) — earlier values
+        # are dominated by HTTP setup time and would mislead the user.
+        if pct >= 0.02 and pct < 1.0:
+            eta_total = elapsed / pct
+            eta_remaining = max(0, int(eta_total - elapsed))
+        _write_status({
+            "pct": round(pct, 4),
+            "msg": msg or "Scaricando il modello AI...",
+            "elapsed_s": int(elapsed),
+            "eta_remaining_s": eta_remaining,
+            "done": False,
+            "error": None,
+            "ts": time.time(),
+        })
+
+    # Wrap _on_progress with a Streamlit-side message we control
+    def _on_progress(pct: float, msg: str = "") -> None:
+        progress_cb(pct, msg)
+
+    try:
+        # Ensure imports work — the launcher's _bootstrap_env added app_dir to sys.path
+        from core.model_manager import ensure_model_available  # noqa: E402
+        _on_progress(0.0, "Avvio download modello AI...")
+        model_path = ensure_model_available(progress_callback=_on_progress)
+        if not model_path:
+            _write_status({
+                "pct": 0.0, "done": False, "error": "ensure_model_available returned None",
+                "msg": "Download fallito", "ts": time.time(),
+            })
+            print("_download_model_bg: ensure_model_available returned None", flush=True)
+            return
+
+        # Update .env with model path so the next launch (and current Streamlit
+        # if it reloads its .env) sees it.
+        env_file = app_dir / ".env"
+        lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+        replaced = False
+        for i, line in enumerate(lines):
+            if line.strip().startswith("LLAMA_CPP_MODEL_PATH="):
+                lines[i] = f"LLAMA_CPP_MODEL_PATH={model_path}"
+                replaced = True
+                break
+        if not replaced:
+            lines.append(f"LLAMA_CPP_MODEL_PATH={model_path}")
+        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        _write_status({
+            "pct": 1.0,
+            "msg": "Modello AI pronto",
+            "elapsed_s": int(time.monotonic() - start),
+            "eta_remaining_s": 0,
+            "done": True,
+            "error": None,
+            "model_path": model_path,
+            "ts": time.time(),
+        })
+        print(f"_download_model_bg: complete, model at {model_path}", flush=True)
+
+    except Exception as exc:
+        print(f"_download_model_bg: FAILED — {exc!r}", flush=True)
+        traceback.print_exc()
+        _write_status({
+            "pct": 0.0, "done": False, "error": repr(exc),
+            "msg": f"Errore download: {exc}", "ts": time.time(),
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +313,7 @@ def _start_streamlit(port: int, app_dir: Path) -> subprocess.Popen:
     cmd = [
         sys.executable, "-m", "streamlit", "run",
         str(app_dir / "app.py"),
+        "--global.developmentMode=false",
         "--server.port", str(port),
         "--server.headless", "true",
         "--server.fileWatcherType", "none",
@@ -169,6 +321,7 @@ def _start_streamlit(port: int, app_dir: Path) -> subprocess.Popen:
     ]
     env = os.environ.copy()
     env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+    env["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
 
     proc = subprocess.Popen(cmd, env=env, cwd=str(app_dir))
     _procs.append(proc)
@@ -198,8 +351,14 @@ if sys.platform != "win32":
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    print("main(): resolving app_dir...", flush=True)
     app_dir = _resolve_app_dir()
+    print(f"main(): app_dir = {app_dir}", flush=True)
+
     port = _get_free_port()
+    print(f"main(): free port = {port}", flush=True)
+
+    print(f"main(): splash HTML = {_SPLASH_HTML} (exists: {_SPLASH_HTML.exists()})", flush=True)
 
     # Create the native window showing the splash screen
     window = webview.create_window(
@@ -209,30 +368,98 @@ def main() -> None:
         height=900,
         min_size=(1024, 700),
     )
+    print("main(): pywebview window created", flush=True)
 
     def _on_shown() -> None:
-        """Background thread: setup → start Streamlit → navigate."""
-        # 1. First-run setup (model download, .env)
-        _ensure_first_run_setup(app_dir, window)
+        """Background thread: bootstrap → Streamlit + model download in parallel."""
+        try:
+            # 1. Synchronous bootstrap — fast (.env, sys.path). Required before
+            #    Streamlit starts so app.py can resolve LLM_BACKEND and DB path.
+            print("_on_shown: bootstrap_env...", flush=True)
+            _bootstrap_env(app_dir)
+            print("_on_shown: bootstrap_env done", flush=True)
 
-        # 2. Start Streamlit
-        _start_streamlit(port, app_dir)
+            # 2. Pre-mark status file: lets the UI banner know a download is
+            #    coming, even before the bg thread has computed any progress.
+            #    We only set this if the model is NOT already on disk —
+            #    otherwise the banner would flash uselessly.
+            from core.model_manager import MODELS_DIR  # imported via sys.path
 
-        # 3. Wait for Streamlit to become ready
-        if _wait_for_port(port):
-            window.load_url(f"http://127.0.0.1:{port}")
-        else:
-            window.load_html(
-                "<html><body style='font-family:sans-serif;padding:2em'>"
-                "<h2>Startup failed</h2>"
-                "<p>Streamlit did not respond within 30 seconds.</p>"
-                "<p>Try restarting the application.</p>"
-                "</body></html>"
-            )
+            already_have_a_model = any(MODELS_DIR.glob("*.gguf")) if MODELS_DIR.exists() else False
+            if not already_have_a_model:
+                _write_status({
+                    "pct": 0.0,
+                    "msg": "Preparazione download modello AI...",
+                    "elapsed_s": 0,
+                    "eta_remaining_s": None,
+                    "done": False,
+                    "error": None,
+                    "ts": time.time(),
+                })
+                print("_on_shown: spawning model download thread", flush=True)
+                Thread(target=_download_model_bg, args=(app_dir,), daemon=True).start()
+            else:
+                print("_on_shown: model already present — skipping download", flush=True)
+                # If the model is present we still want LLAMA_CPP_MODEL_PATH in
+                # .env (in case it was removed). Reuse the bg routine but mark
+                # done immediately so the banner doesn't appear.
+                Thread(target=_download_model_bg, args=(app_dir,), daemon=True).start()
+
+            # 3. Start Streamlit immediately — it can render the wizard while
+            #    the model downloads in the background. The wizard does not
+            #    need the LLM, only the Import page does.
+            print("_on_shown: starting Streamlit...", flush=True)
+            _start_streamlit(port, app_dir)
+
+            print(f"_on_shown: waiting for port {port}...", flush=True)
+            if _wait_for_port(port):
+                print(f"_on_shown: Streamlit ready, navigating window", flush=True)
+                window.load_url(f"http://127.0.0.1:{port}")
+            else:
+                print("_on_shown: Streamlit did not respond within 30s", flush=True)
+                window.load_html(
+                    "<html><body style='font-family:sans-serif;padding:2em'>"
+                    "<h2>Startup failed</h2>"
+                    "<p>Streamlit did not respond within 30 seconds.</p>"
+                    "<p>See ~/Library/Logs/spendifai-launcher.log for details.</p>"
+                    "</body></html>"
+                )
+        except Exception:
+            print("_on_shown: UNHANDLED EXCEPTION", flush=True)
+            traceback.print_exc()
+            try:
+                window.load_html(
+                    "<html><body style='font-family:sans-serif;padding:2em'>"
+                    "<h2>Startup error</h2>"
+                    "<p>An exception occurred during setup.</p>"
+                    "<p>See <code>~/Library/Logs/spendifai-launcher.log</code> for the full trace.</p>"
+                    "</body></html>"
+                )
+            except Exception:
+                pass
 
     # webview.start() blocks until the window is closed.
     # _on_shown runs in a background thread after the window is visible.
+    print("main(): calling webview.start()...", flush=True)
     webview.start(_on_shown, debug=("--debug" in sys.argv))
+    print("main(): webview.start() returned (window closed)", flush=True)
 
     # Window closed → clean up
     _cleanup()
+    print("main(): cleanup done, exiting", flush=True)
+
+
+def _entrypoint() -> None:
+    """Top-level entry: catch any uncaught exception and log it."""
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException:
+        print("=== TOP-LEVEL UNHANDLED EXCEPTION ===", flush=True)
+        traceback.print_exc()
+        raise
+
+
+if __name__ == "__main__":
+    _entrypoint()

@@ -74,6 +74,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ── Model download banner ─────────────────────────────────────────────────────
+# Persistent banner across all pages while the desktop launcher is downloading
+# the GGUF model in the background. Renders nothing once download is done or
+# when running outside the desktop bundle. Uses st.fragment(run_every=2) so
+# the rest of the page never reruns just for the banner.
+from ui.widgets.model_download_banner import render_model_download_banner
+render_model_download_banner()
+
 # ── Onboarding gate ───────────────────────────────────────────────────────────
 # Show the onboarding wizard on first run (when onboarding_done != 'true').
 # This also re-shows if taxonomy_category was somehow wiped.
