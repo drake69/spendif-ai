@@ -237,36 +237,47 @@ if [ -z "$UV" ]; then
 fi
 echo "uv: $UV"
 
-# ── 2. Create user venv on first launch ─────────────────────────────────────
+# ── 2. Sync user venv (idempotent — fast if already in sync) ────────────────
+# Run uv sync EVERY launch, not just when the venv directory is missing:
+# package upgrades (e.g. `apt upgrade spendifai`) ship a new pyproject.toml
+# with possibly new deps (this is how PyQt6 got added in 0.1.1 vs 0.1.0).
+# If the venv already matches the lockfile, uv sync is a no-op (checks
+# hashes, exits in ~1 s). Otherwise it installs / upgrades / removes
+# packages as needed.
+IS_FIRST_LAUNCH=false
 if [ ! -d "$VENV_DIR" ]; then
+  IS_FIRST_LAUNCH=true
   echo "First launch — creating $VENV_DIR"
   echo "This compiles llama-cpp-python natively (3-8 min on arm64; faster on amd64)."
-
-  # Detect NVIDIA GPU (best-effort, falls back silently)
-  if command -v nvidia-smi &>/dev/null; then
-    export CMAKE_ARGS="-DGGML_CUDA=on"
-    export FORCE_CMAKE=1
-  fi
-
-  # Use the project pyproject.toml but point uv at a venv outside /opt.
-  # We do NOT pass --quiet — silent compile feels like a hung script and the
-  # `set -o pipefail` above would only help if we piped at all. Verbose stderr
-  # makes uv errors visible in launch.log when something breaks.
-  cd "$APP_DIR"
-  if ! UV_PROJECT_ENVIRONMENT="$VENV_DIR" "$UV" sync --extra desktop; then
-    echo "GPU build failed (or first attempt errored), retrying CPU-only..."
-    unset CMAKE_ARGS FORCE_CMAKE
-    rm -rf "$VENV_DIR"        # nuke a possibly-partial venv before retry
-    UV_PROJECT_ENVIRONMENT="$VENV_DIR" "$UV" sync --extra desktop
-  fi
-
-  if [ ! -x "$VENV_DIR/bin/python" ]; then
-    echo "FATAL: venv created but $VENV_DIR/bin/python is missing."
-    echo "Check this log and ~/.spendifai/launch.log for uv errors."
-    exit 1
-  fi
-  echo "venv ready: $VENV_DIR"
+else
+  echo "Existing venv — running uv sync to align with current pyproject.toml..."
 fi
+
+# Detect NVIDIA GPU (best-effort, falls back silently)
+if command -v nvidia-smi &>/dev/null; then
+  export CMAKE_ARGS="-DGGML_CUDA=on"
+  export FORCE_CMAKE=1
+fi
+
+# We do NOT pass --quiet — silent compile feels like a hung script. Verbose
+# stderr makes uv errors visible in launch.log when something breaks.
+cd "$APP_DIR"
+if ! UV_PROJECT_ENVIRONMENT="$VENV_DIR" "$UV" sync --extra desktop; then
+  echo "uv sync failed (GPU build error or first attempt), retrying CPU-only..."
+  unset CMAKE_ARGS FORCE_CMAKE
+  if $IS_FIRST_LAUNCH; then
+    rm -rf "$VENV_DIR"      # nuke a possibly-partial venv before retry
+  fi
+  UV_PROJECT_ENVIRONMENT="$VENV_DIR" "$UV" sync --extra desktop
+fi
+
+if [ ! -x "$VENV_DIR/bin/python" ]; then
+  echo "FATAL: venv exists but $VENV_DIR/bin/python is missing."
+  echo "Check this log for uv errors, then remove the venv and retry:"
+  echo "  rm -rf $VENV_DIR && /opt/spendifai/launch.sh"
+  exit 1
+fi
+echo "venv ready: $VENV_DIR"
 
 # ── 3. Seed .env if missing (writable in USER_HOME, not in /opt) ────────────
 ENV_FILE="$USER_HOME_DIR/.env"
