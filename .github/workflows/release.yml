@@ -166,9 +166,18 @@ jobs:
   # Linux — .deb + .rpm
   # ─────────────────────────────────────────────────────────────────────────
   build-deb:
-    name: Build .deb (Ubuntu)
+    name: Build .deb (${{ matrix.arch }})
     needs: prepare
     runs-on: ubuntu-latest
+    strategy:
+      # The .deb content is pure Python source — `uv sync` in postinst
+      # compiles native deps on the target machine, so we ship the same
+      # bytes for every Linux architecture. We still build two .deb files
+      # with the right `Architecture:` declaration so apt installs cleanly
+      # on both amd64 desktops and arm64 (Apple Silicon VMs, Raspberry Pi).
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -177,12 +186,15 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fakeroot
 
       - name: Build .deb package
-        run: bash packaging/linux/build-deb.sh --version ${{ needs.prepare.outputs.version }}
+        run: bash packaging/linux/build-deb.sh --version ${{ needs.prepare.outputs.version }} --arch ${{ matrix.arch }}
 
       - name: Verify .deb
-        run: ls -lh build/spendifai_*.deb
+        run: ls -lh build/spendifai_*_${{ matrix.arch }}.deb
 
       - name: Smoke test — install in clean container
+        # Only run the container smoke test on amd64. The arm64 .deb has
+        # the same bytes — declaring it arm64 only sets the dpkg metadata.
+        if: matrix.arch == 'amd64'
         run: |
           docker run --rm \
             -v "$PWD/build:/packages:ro" \
@@ -190,7 +202,7 @@ jobs:
             bash -c '
               set -e
               apt-get update -qq
-              apt-get install -y -qq /packages/spendifai_*.deb 2>&1 | tail -5
+              apt-get install -y -qq /packages/spendifai_*_amd64.deb 2>&1 | tail -5
               dpkg -l spendifai | grep -q "^ii"
               echo "✅ .deb installed"
               test -f /opt/spendifai/app.py
@@ -202,8 +214,8 @@ jobs:
       - name: Upload .deb artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: deb-package
-          path: build/spendifai_*.deb
+          name: deb-package-${{ matrix.arch }}
+          path: build/spendifai_*_${{ matrix.arch }}.deb
           retention-days: 30
 
   build-rpm:
@@ -299,7 +311,8 @@ jobs:
           |----------|------|---------|
           | macOS | SpendifAi-${VERSION}.dmg | Double-click, drag to Applications |
           | Windows | SpendifAi-${VERSION}.msix | Double-click to install (requires trusted signature) |
-          | Ubuntu/Debian | spendifai_${VERSION}_amd64.deb | sudo apt install ./spendifai_*.deb |
+          | Ubuntu/Debian (x86_64) | spendifai_${VERSION}_amd64.deb | sudo apt install ./spendifai_${VERSION}_amd64.deb |
+          | Ubuntu/Debian (ARM64) | spendifai_${VERSION}_arm64.deb | sudo apt install ./spendifai_${VERSION}_arm64.deb |
           | Fedora/RHEL | spendifai-${VERSION}-1.noarch.rpm | sudo dnf install ./spendifai-*.rpm |
 
           ### SHA256 Checksums
