@@ -5,7 +5,7 @@ description = "Unified personal finance ledger with hybrid LLM pipeline"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Luigi Corsaro" }]
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     # Core data
     "pandas>=2.2",
@@ -49,11 +49,15 @@ desktop = [
     # GUI backend for pywebview:
     # - macOS uses Cocoa (built into pyobjc) — no extra dep
     # - Windows uses WebView2 (system component) — no extra dep
-    # - Linux needs either GTK (PyGObject + system libs) or Qt; we pick Qt
-    #   because PyQt6 is pure-pip (no system -dev packages, no version
-    #   mismatch with the system python3-gi shipped by Ubuntu/Fedora).
-    "qtpy>=2.4 ; sys_platform == 'linux'",
-    "PyQt6>=6.6 ; sys_platform == 'linux'",
+    # - Linux uses GTK via PyGObject. We previously tried Qt (PyQt5/6) but
+    #   pywebview's qt.py imports `from PyQt5.QtNetwork import ...` directly
+    #   (no qtpy abstraction in 5.x), and PyQt5 has no manylinux aarch64
+    #   wheel for Python 3.13 — only a source build that needs qmake.
+    #   PyGObject 3.50+ has prebuilt wheels for cp313-{x86_64,aarch64}-linux
+    #   and reads the typelibs from system /usr/lib/.../girepository-1.0
+    #   (provided by `gir1.2-webkit2-4.1` in our .deb Depends).
+    "PyGObject>=3.50 ; sys_platform == 'linux'",
+    "pycairo>=1.26 ; sys_platform == 'linux'",
 ]
 
 [tool.pytest.ini_options]
