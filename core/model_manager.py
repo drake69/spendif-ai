@@ -295,6 +295,29 @@ def ensure_model_available(
         return None
 
 
+def _make_callback_tqdm(tqdm_base, progress_callback):
+    """Return a tqdm subclass whose ``update()`` propagates progress to a callback.
+
+    Extracted from ``_download_from_hf`` so it can be unit-tested without
+    needing a real HuggingFace download.
+    """
+    if tqdm_base is None or progress_callback is None:
+        return tqdm_base
+
+    class _CallbackTqdm(tqdm_base):  # type: ignore[misc, valid-type]
+        def update(self, n=1):
+            ret = super().update(n)
+            try:
+                if self.total:
+                    progress_callback(min(1.0, self.n / self.total))
+            except Exception:
+                # Never let a UI hiccup kill the download.
+                pass
+            return ret
+
+    return _CallbackTqdm
+
+
 def _download_from_hf(
     repo: str,
     filename: str,
@@ -319,23 +342,7 @@ def _download_from_hf(
         except ImportError:
             _tqdm_base = None
 
-        if _tqdm_base is not None and progress_callback is not None:
-            class _CallbackTqdm(_tqdm_base):  # type: ignore[misc, valid-type]
-                """tqdm subclass that propagates each update to our callback."""
-
-                def update(self, n=1):
-                    ret = super().update(n)
-                    try:
-                        if self.total:
-                            progress_callback(min(1.0, self.n / self.total))
-                    except Exception:
-                        # Never let a UI hiccup kill the download.
-                        pass
-                    return ret
-
-            tqdm_cls = _CallbackTqdm
-        else:
-            tqdm_cls = _tqdm_base
+        tqdm_cls = _make_callback_tqdm(_tqdm_base, progress_callback)
 
         # hf_hub_download handles caching, resume, etc.
         downloaded = hf_hub_download(
