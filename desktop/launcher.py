@@ -309,7 +309,15 @@ _procs: list[subprocess.Popen] = []
 
 
 def _start_streamlit(port: int, app_dir: Path) -> subprocess.Popen:
-    """Launch ``streamlit run app.py`` in a child process."""
+    """Launch ``streamlit run app.py`` in a child process.
+
+    The child is started in its own process group (``start_new_session``)
+    so we can later kill the entire tree — including uvicorn workers,
+    Streamlit script reruns and any pywebview helper — with one signal
+    via ``os.killpg``. Without this, closing the pywebview window leaves
+    Streamlit running, which looks to the user like the app "reopens on
+    its own" the next time they double-click the bundle.
+    """
     cmd = [
         sys.executable, "-m", "streamlit", "run",
         str(app_dir / "app.py"),
@@ -323,27 +331,76 @@ def _start_streamlit(port: int, app_dir: Path) -> subprocess.Popen:
     env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
     env["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
 
-    proc = subprocess.Popen(cmd, env=env, cwd=str(app_dir))
+    popen_kwargs = {"env": env, "cwd": str(app_dir)}
+    if sys.platform != "win32":
+        # Detach into a new session so the child + its descendants form
+        # their own process group, killable with one signal.
+        popen_kwargs["start_new_session"] = True
+    else:
+        # On Windows, use CREATE_NEW_PROCESS_GROUP for the same purpose.
+        popen_kwargs["creationflags"] = getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+
+    proc = subprocess.Popen(cmd, **popen_kwargs)
     _procs.append(proc)
     return proc
 
 
 def _cleanup() -> None:
-    """Terminate all child processes (called on exit)."""
+    """Terminate every child process tree we spawned.
+
+    Streamlit itself spawns descendants (uvicorn worker, script subprocess,
+    pywebview helpers depending on backend). A plain ``proc.terminate()``
+    only signals the immediate child; the grandchildren survive and keep
+    holding the port + the model file open, which on macOS makes the
+    application "reopen" on the next launch because Launch Services thinks
+    the previous instance is still running.
+
+    Solution: kill the entire process group of each tracked Popen.
+    """
+    print("_cleanup: terminating subprocesses…", flush=True)
     for p in _procs:
-        if p.poll() is None:
-            p.terminate()
+        if p.poll() is not None:
+            continue
+        try:
+            if sys.platform != "win32":
+                # Send SIGTERM to the whole process group; falls back to
+                # plain terminate() if for some reason killpg fails.
+                try:
+                    pgid = os.getpgid(p.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError, OSError):
+                    p.terminate()
+            else:
+                p.terminate()
+        except Exception as exc:
+            print(f"_cleanup: terminate failed for pid={p.pid}: {exc!r}", flush=True)
+
     for p in _procs:
         try:
             p.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            p.kill()
+            try:
+                if sys.platform != "win32":
+                    try:
+                        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError, OSError):
+                        p.kill()
+                else:
+                    p.kill()
+            except Exception as exc:
+                print(f"_cleanup: kill failed for pid={p.pid}: {exc!r}", flush=True)
+    print("_cleanup: done", flush=True)
 
 
 atexit.register(_cleanup)
 
 if sys.platform != "win32":
+    # Both SIGTERM (kill, Activity Monitor force-quit) and SIGINT (Ctrl+C
+    # in dev) trigger a clean exit that goes through atexit → _cleanup.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
 
 
 # ---------------------------------------------------------------------------

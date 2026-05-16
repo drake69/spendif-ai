@@ -74,23 +74,48 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Model download banner ─────────────────────────────────────────────────────
-# Persistent banner across all pages while the desktop launcher is downloading
-# the GGUF model in the background. Renders nothing once download is done or
-# when running outside the desktop bundle. Uses st.fragment(run_every=2) so
-# the rest of the page never reruns just for the banner.
-from ui.widgets.model_download_banner import render_model_download_banner
-render_model_download_banner()
-
-# ── Onboarding gate ───────────────────────────────────────────────────────────
-# Show the onboarding wizard on first run (when onboarding_done != 'true').
-# This also re-shows if taxonomy_category was somehow wiped.
+# ── First-run experience ─────────────────────────────────────────────────────
+# Before the first onboarding the user should see ONE focused page — no
+# sidebar, no toolbar — that combines the live model-download status and
+# the configuration wizard. As soon as onboarding is done we drop back to
+# the normal layout. If a model download is still in flight at that point,
+# the wizard has already completed and the user opted in to using the rest
+# of the app (Import is gated separately).
 from services.settings_service import SettingsService as _SvcCheck
 _cfg_check = _SvcCheck(engine)
+
 if not _cfg_check.is_onboarding_done():
+    # Hide chrome — full-screen immersive look while onboarding.
+    st.markdown("""
+        <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="stHeader"] { display: none !important; }
+        [data-testid="stToolbar"] { display: none !important; }
+        section[data-testid="stSidebarUserContent"] { display: none !important; }
+        .main .block-container {
+            max-width: 820px;
+            padding-top: 2rem;
+            padding-bottom: 4rem;
+        }
+        /* Streamlit injects a small "Manage app" button — hide it too */
+        .stDeployButton { display: none !important; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Live download status (banner-only, sits above the wizard).
+    from ui.widgets.model_download_banner import render_model_download_banner
+    render_model_download_banner()
+
     from ui.onboarding_page import render_onboarding_page
     render_onboarding_page(engine)
     st.stop()
+
+# ── Normal-mode banner ───────────────────────────────────────────────────────
+# Once onboarding is done, the user can roam the app. If the model is still
+# downloading in the background, show the same live banner at the top of
+# every page (sidebar visible). Renders nothing when no download is active.
+from ui.widgets.model_download_banner import render_model_download_banner
+render_model_download_banner()
 
 # ── i18n: set UI language from user settings ─────────────────────────────────
 from ui.i18n import set_language as _set_lang
