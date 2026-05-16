@@ -123,6 +123,7 @@ More detail → [docs/developer_guide.en.md](docs/developer_guide.en.md).
 | Database schema | [EN](docs/database.en.md) · [IT](docs/database.md) |
 | Deployment | [EN](docs/deployment.en.md) · [IT](docs/deployment.md) |
 | Release process | [EN](docs/release_process.md) · [IT](docs/release_process.it.md) |
+| Desktop build &amp; test loop | [EN](docs/desktop_build_and_test.md) · [IT](docs/desktop_build_and_test.it.md) |
 | Contributing | [EN](CONTRIBUTING.en.md) · [IT](CONTRIBUTING.md) |
 | Security policy | [EN](SECURITY.md) · [IT](SECURITY.it.md) |
 | Changelog | [EN](CHANGELOG.md) · [IT](CHANGELOG.it.md) |
