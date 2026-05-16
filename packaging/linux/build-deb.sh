@@ -130,87 +130,45 @@ Description: Personal finance manager with local AI categorisation
 EOF
 
 # ── DEBIAN/postinst ──────────────────────────────────────────────────────────
+# Postinst runs as ROOT, with $HOME=/root. Anything user-specific (venv,
+# model download, ~/.spendifai) belongs in a script that runs at FIRST
+# USER LAUNCH instead — postinst here only installs uv system-wide so
+# every desktop user can use it. The .desktop Exec line spawns the
+# launch.sh wrapper which performs the per-user setup the first time.
 cat > "${PKG_ROOT}/DEBIAN/postinst" <<'POSTINST'
 #!/bin/bash
 # =============================================================================
-#  Spendif.ai — post-installation script
-#  Runs after dpkg unpacks files to /opt/spendifai
+#  Spendif.ai — post-installation (root context, minimal)
+#  Only system-wide setup. Per-user setup runs at first launch via launch.sh.
 # =============================================================================
 set -e
 
-INSTALL_DIR="/opt/spendifai"
-SPENDIFAI_HOME="$HOME/.spendifai"
-ENV_FILE="$INSTALL_DIR/.env"
-
 echo ""
-echo "  Spendif.ai — post-install setup"
+echo "  Spendif.ai — post-install"
 echo ""
 
-# ── 1. Install uv if not present ────────────────────────────────────────────
-export PATH="$HOME/.local/bin:$PATH"
-if ! command -v uv &>/dev/null; then
-  echo "  ▸ Installing uv (Python package manager)..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="$HOME/.local/bin:$PATH"
-fi
-echo "  ✔ uv ready"
-
-# ── 2. Create Python venv + install dependencies ────────────────────────────
-echo "  ▸ Installing Python dependencies (may take a few minutes)..."
-cd "$INSTALL_DIR"
-
-# Detect NVIDIA GPU
-CMAKE_EXTRA=""
-if command -v nvidia-smi &>/dev/null; then
-  GPU=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
-  if [ -n "$GPU" ]; then
-    echo "  ✔ NVIDIA GPU: $GPU"
-    export CMAKE_ARGS="-DGGML_CUDA=on"
-    export FORCE_CMAKE=1
+# ── 1. System-wide uv install ───────────────────────────────────────────────
+# Place uv in /usr/local/bin so EVERY user (not just root) has it on PATH.
+# astral.sh/uv/install.sh respects UV_INSTALL_DIR.
+if ! [ -x /usr/local/bin/uv ]; then
+  echo "  ▸ Installing uv to /usr/local/bin..."
+  TMP_UV_DIR=$(mktemp -d)
+  curl -LsSf https://astral.sh/uv/install.sh | \
+    env XDG_CONFIG_HOME=/tmp UV_INSTALL_DIR=/usr/local/bin sh -s -- --no-modify-path 2>&1 | tail -3
+  # Fallback if the env-driven install ignored UV_INSTALL_DIR (older curl?):
+  if ! [ -x /usr/local/bin/uv ] && [ -x /root/.local/bin/uv ]; then
+    cp /root/.local/bin/uv /usr/local/bin/uv
+    chmod 0755 /usr/local/bin/uv
   fi
+  rm -rf "$TMP_UV_DIR"
 fi
-
-uv sync --extra desktop --quiet 2>&1 | tail -3 || {
-  echo "  ⚠ GPU build failed — retrying CPU-only..."
-  unset CMAKE_ARGS FORCE_CMAKE
-  uv sync --extra desktop --quiet
-}
-echo "  ✔ Python environment ready"
-
-# ── 3. Create data directory ────────────────────────────────────────────────
-mkdir -p "$SPENDIFAI_HOME/models"
-echo "$INSTALL_DIR" > "$SPENDIFAI_HOME/install_path.txt"
-
-# ── 4. Create .env ──────────────────────────────────────────────────────────
-if [ ! -f "$ENV_FILE" ]; then
-  cat > "$ENV_FILE" <<EOF
-SPENDIFAI_DB=sqlite:///$SPENDIFAI_HOME/spendifai.db
-LLM_BACKEND=local_llama_cpp
-EOF
-fi
-
-# ── 5. Download AI model ────────────────────────────────────────────────────
-echo "  ▸ Downloading recommended AI model..."
-MODEL_PATH=$(cd "$INSTALL_DIR" && uv run python -c "
-import sys, os
-sys.path.insert(0, '.')
-from core.model_manager import ensure_model_available
-path = ensure_model_available(progress_callback=lambda pct, msg: print(f'    {pct:.0%}  {msg}', flush=True))
-print(path or '')
-" 2>&1 | tail -1)
-
-if [ -n "$MODEL_PATH" ] && [ "$MODEL_PATH" != "None" ]; then
-  echo "  ✔ AI model: $(basename "$MODEL_PATH")"
-  if grep -q "^LLAMA_CPP_MODEL_PATH=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^LLAMA_CPP_MODEL_PATH=.*|LLAMA_CPP_MODEL_PATH=$MODEL_PATH|" "$ENV_FILE"
-  else
-    echo "LLAMA_CPP_MODEL_PATH=$MODEL_PATH" >> "$ENV_FILE"
-  fi
+if [ -x /usr/local/bin/uv ]; then
+  echo "  ✔ uv: $(/usr/local/bin/uv --version 2>&1 | head -1)"
 else
-  echo "  ⚠ Model download failed — will retry on first launch"
+  echo "  ⚠ uv install failed — user will be prompted to install on first launch."
 fi
 
-# ── 6. Update icon cache ────────────────────────────────────────────────────
+# ── 2. Refresh icon + desktop caches ────────────────────────────────────────
 if command -v gtk-update-icon-cache &>/dev/null; then
   gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
 fi
@@ -219,25 +177,100 @@ if command -v update-desktop-database &>/dev/null; then
 fi
 
 echo ""
-echo "  ✔ Spendif.ai installation complete!"
-echo "    Launch: search 'Spendif' in Activities, or run:"
-echo "    cd /opt/spendifai && uv run python -m desktop.launcher"
+echo "  ✔ Spendif.ai installed."
+echo "    On first launch the app will set up a per-user Python venv in"
+echo "    ~/.spendifai/.venv and download the recommended AI model (~3 GB)."
+echo "    Launch: search 'Spendif' in Activities, or run /opt/spendifai/launch.sh"
 echo ""
 POSTINST
 
 chmod 0755 "${PKG_ROOT}/DEBIAN/postinst"
 
 # ── DEBIAN/prerm ─────────────────────────────────────────────────────────────
+# Per-user venv lives in ~/.spendifai/.venv (created by launch.sh on first
+# run), not under /opt — so there is nothing for prerm to clean other than
+# remnants of the old layout (≤ 0.1.0 used /opt/spendifai/.venv).
 cat > "${PKG_ROOT}/DEBIAN/prerm" <<'PRERM'
 #!/bin/bash
-# Clean up venv on uninstall (keep user data in ~/.spendifai)
 set -e
+# Legacy layout cleanup (pre-launch.sh installs put the venv under /opt)
 rm -rf /opt/spendifai/.venv 2>/dev/null || true
-echo "  Spendif.ai removed. User data preserved in ~/.spendifai/"
-echo "  To remove all data: rm -rf ~/.spendifai"
+echo "  Spendif.ai removed."
+echo "  Per-user data preserved in ~/.spendifai/ — wipe with:"
+echo "    bash /opt/spendifai/cleanup.sh   (if available)  OR  rm -rf ~/.spendifai"
 PRERM
 
 chmod 0755 "${PKG_ROOT}/DEBIAN/prerm"
+
+# ── /opt/spendifai/launch.sh — per-user first-launch + run wrapper ──────────
+# Runs as the USER (invoked by the .desktop file via gnome-shell, not as root).
+# On first launch: creates per-user venv in ~/.spendifai/.venv, syncs deps,
+# then execs the pywebview launcher. On subsequent launches: just execs.
+cat > "${INSTALL_ROOT}/launch.sh" <<'LAUNCH'
+#!/bin/bash
+# =============================================================================
+#  Spendif.ai — user-space launcher (Linux)
+#  Sets up ~/.spendifai/.venv on first run, then execs the pywebview launcher.
+#  /opt/spendifai contains read-only source code; nothing user-specific lives
+#  there. All per-user state goes in ~/.spendifai/.
+# =============================================================================
+set -e
+
+APP_DIR="/opt/spendifai"
+USER_HOME_DIR="$HOME/.spendifai"
+VENV_DIR="$USER_HOME_DIR/.venv"
+LOG_FILE="$USER_HOME_DIR/launch.log"
+
+mkdir -p "$USER_HOME_DIR"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== launch.sh $(date -Iseconds) ==="
+
+# ── 1. Find uv ──────────────────────────────────────────────────────────────
+UV=""
+for candidate in /usr/local/bin/uv "$HOME/.local/bin/uv" /usr/bin/uv; do
+  if [ -x "$candidate" ]; then UV="$candidate"; break; fi
+done
+if [ -z "$UV" ]; then
+  echo "uv not found — installing in user home"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  UV="$HOME/.local/bin/uv"
+fi
+echo "uv: $UV"
+
+# ── 2. Create user venv on first launch ─────────────────────────────────────
+if [ ! -d "$VENV_DIR" ]; then
+  echo "First launch — creating $VENV_DIR"
+
+  # Detect NVIDIA GPU (best-effort, falls back silently)
+  if command -v nvidia-smi &>/dev/null; then
+    export CMAKE_ARGS="-DGGML_CUDA=on"
+    export FORCE_CMAKE=1
+  fi
+
+  # Use the project pyproject.toml but point uv at a venv outside /opt
+  cd "$APP_DIR"
+  UV_PROJECT_ENVIRONMENT="$VENV_DIR" "$UV" sync --extra desktop --quiet 2>&1 | tail -5 || {
+    echo "GPU build failed, retrying CPU-only"
+    unset CMAKE_ARGS FORCE_CMAKE
+    UV_PROJECT_ENVIRONMENT="$VENV_DIR" "$UV" sync --extra desktop --quiet
+  }
+  echo "venv ready: $VENV_DIR"
+fi
+
+# ── 3. Seed .env if missing (writable in USER_HOME, not in /opt) ────────────
+ENV_FILE="$USER_HOME_DIR/.env"
+if [ ! -f "$ENV_FILE" ]; then
+  cat > "$ENV_FILE" <<EOF
+SPENDIFAI_DB=sqlite:///$USER_HOME_DIR/ledger.db
+LLM_BACKEND=local_llama_cpp
+EOF
+fi
+
+# ── 4. Launch the pywebview app ─────────────────────────────────────────────
+cd "$APP_DIR"
+exec "$VENV_DIR/bin/python" -m desktop.launcher
+LAUNCH
+chmod 0755 "${INSTALL_ROOT}/launch.sh"
 
 # ── .desktop file ────────────────────────────────────────────────────────────
 cat > "${PKG_ROOT}/usr/share/applications/spendifai.desktop" <<'DESKTOP'
@@ -245,7 +278,7 @@ cat > "${PKG_ROOT}/usr/share/applications/spendifai.desktop" <<'DESKTOP'
 Type=Application
 Name=Spendif.ai
 Comment=Personal finance manager with local AI categorisation
-Exec=bash -c 'export PATH="$HOME/.local/bin:$PATH" && cd /opt/spendifai && uv run python -m desktop.launcher'
+Exec=/opt/spendifai/launch.sh
 Icon=spendifai
 Terminal=false
 Categories=Office;Finance;
@@ -255,11 +288,13 @@ Keywords=finance;budget;bank;expense;
 DESKTOP
 
 # ── Set permissions ──────────────────────────────────────────────────────────
-# /opt/spendifai needs to be writable for uv sync (creates .venv inside)
+# /opt/spendifai is read-only source code; per-user venv lives in
+# ~/.spendifai/.venv (created by launch.sh on first run).
 find "${INSTALL_ROOT}" -type f -exec chmod 644 {} +
 find "${INSTALL_ROOT}" -type d -exec chmod 755 {} +
-# Python files need exec for shebangs
-find "${INSTALL_ROOT}" -name "*.py" -exec chmod 644 {} +
+# launch.sh MUST be executable — it's the .desktop file's Exec target.
+# (The generic 0644 find above clobbers the chmod inside the heredoc.)
+chmod 0755 "${INSTALL_ROOT}/launch.sh"
 chmod 644 "${PKG_ROOT}/usr/share/applications/spendifai.desktop"
 
 # ── Build .deb ───────────────────────────────────────────────────────────────
