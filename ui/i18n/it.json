@@ -535,6 +535,8 @@
   "onboarding.step3.llm_available": "Modello disponibile: **{name}** ({size} GB)",
   "onboarding.step3.llm_recommended": "HW: {gpu} · {ram} GB RAM → Consigliato: **{name}** ({size} MB). Verrà scaricato al primo import.",
   "onboarding.step3.llm_none": "Nessun modello compatibile trovato. Configura manualmente in Impostazioni.",
+  "onboarding.step3.waiting_model": "Attendi il download del modello AI",
+  "onboarding.step3.model_error": "Download modello AI fallito: {error}. Vai in Impostazioni per riprovare.",
   "onboarding.step3.applying": "Configurazione in corso…",
   "onboarding.step3.done": "✅ Configurazione completata!",
   "onboarding.account_type.bank_account": "Conto corrente",

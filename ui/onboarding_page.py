@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from datetime import date
 
+import json
 import os
+import time
+from pathlib import Path
 
 import streamlit as st
 
@@ -20,6 +23,39 @@ from support.logging import setup_logging
 from ui.i18n import t
 
 logger = setup_logging()
+
+# ── Model download status (set by desktop launcher's background thread) ──────
+_MODEL_STATUS_FILE = Path.home() / ".spendifai" / "model_download.status"
+
+
+def _read_model_download_status() -> dict | None:
+    """Return the live status dict written by ``desktop/launcher.py``.
+
+    Returns ``None`` when no file exists — typical of source/dev installs
+    where the launcher is not in play and the LLM is whatever the user
+    configured in ``.env``. The wizard treats "no status file" as "no
+    download in progress" and the gate is open.
+    """
+    if not _MODEL_STATUS_FILE.exists():
+        return None
+    try:
+        return json.loads(_MODEL_STATUS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _format_download_eta(seconds: int | None) -> str:
+    """Render seconds-remaining in a human-friendly compact form."""
+    if seconds is None:
+        return "calcolo..."
+    if seconds < 60:
+        return f"{seconds} sec"
+    if seconds < 3600:
+        return f"~{seconds // 60} min"
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    return f"~{h}h {m}min"
+
 
 # ── Session-state keys ────────────────────────────────────────────────────────
 _K_STEP     = "_ob_step"
@@ -439,6 +475,28 @@ def _step3_confirm(cfg_svc: SettingsService, lang_options: list[tuple[str, str]]
 
     st.divider()
 
+    # ── AI model download gate ──────────────────────────────────────────────
+    # The desktop launcher kicks off the model download as soon as the app
+    # boots (before this wizard even renders). The user can complete all the
+    # onboarding steps in parallel; here at the final step we hold the "Avvia"
+    # button until the download reaches 100% so import/categorisation work the
+    # moment onboarding completes.
+    _dl_status = _read_model_download_status()
+    _dl_ready = _dl_status is None or _dl_status.get("done") is True
+    _dl_error = _dl_status.get("error") if _dl_status else None
+
+    if not _dl_ready:
+        _pct = float(_dl_status.get("pct", 0.0)) if _dl_status else 0.0
+        _eta = _dl_status.get("eta_remaining_s") if _dl_status else None
+        _eta_str = _format_download_eta(_eta)
+        st.info(
+            f"⏳ **{t('onboarding.step3.waiting_model')}** — {int(_pct * 100)}% · {_eta_str}",
+            icon="📚",
+        )
+        st.progress(_pct, text=f"{int(_pct * 100)}%")
+    elif _dl_error:
+        st.error(t("onboarding.step3.model_error", error=_dl_error))
+
     col_back, _, col_start = st.columns([1, 2, 1])
     with col_back:
         if st.button(_ui(lang)["back"], use_container_width=True, key="_ob_conf_back"):
@@ -447,8 +505,15 @@ def _step3_confirm(cfg_svc: SettingsService, lang_options: list[tuple[str, str]]
 
     with col_start:
         if st.button(_ui(lang)["start"], type="primary",
-                     use_container_width=True, key="_ob_conf_start"):
+                     use_container_width=True, key="_ob_conf_start",
+                     disabled=not _dl_ready):
             _apply_onboarding(cfg_svc, lang, names, accounts, loc, country=country_code)
+
+    # Auto-refresh every 2 s while we are waiting on the model so the user
+    # sees live progress without manually re-running.
+    if not _dl_ready:
+        time.sleep(2)
+        st.rerun()
 
 
 def _apply_onboarding(
