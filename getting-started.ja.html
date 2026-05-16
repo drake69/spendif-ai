@@ -49,6 +49,11 @@
     .step-img img { max-width: 100%; max-height: 100%; border-radius: 8px; }
     .step-img .ph { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
     .step-img .ph code { background: var(--bg); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+.features-list { list-style: none; padding: 0; margin: 1.5rem 0 0 0; }
+    .features-list li { padding: 1rem 1.2rem; background: var(--surface); border-radius: 8px; margin-bottom: 0.75rem; border-left: 3px solid var(--blue); color: var(--muted); }
+    .features-list li strong { color: var(--text); }
+    .features-list li .beta-tag { color: var(--orange); font-weight: 600; font-size: 0.85rem; margin-left: 0.3rem; }
+    .features-list li .beta-note { color: var(--muted); font-size: 0.85rem; font-style: italic; display: block; margin-top: 0.3rem; }
     .note { background: var(--surface); border-left: 4px solid var(--orange); padding: 1rem 1.2rem; border-radius: 6px; margin: 1.5rem 0; }
     .note strong { color: var(--orange); }
     footer { border-top: 1px solid var(--border); padding: 2rem 1.5rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
@@ -60,6 +65,7 @@
     <div class="nav-inner">
       <div class="nav-brand"><a href="/">Spendif.ai</a></div>
       <div class="nav-links">
+        <a href="#what-you-get">得られるもの</a>
         <a href="#download">ダウンロード</a>
         <a href="#install">インストール</a>
         <a href="#first-launch">初回起動</a>
@@ -75,6 +81,18 @@
 
   <div class="wrap">
 
+
+    <section id="what-you-get">
+      <h2><span class="step-num" style="background:var(--green)">✨</span>得られるもの</h2>
+      <ul class="features-list">
+        <li><strong>任意の銀行のCSV/XLSXをインポート</strong> — フォーマットを自動検出、手動マッピング不要</li>
+        <li><strong>AIによる分類、完全オフライン</strong> — ローカルLLMを同梱、クラウド不要</li>
+        <li><strong>デフォルトでローカルAI</strong> — データはあなたのマシンに留まります。リモートLLMはオプトインで、IBAN / カード / 名義人名をマスクします (金額と日付は依然として送信されます — ロードマップ参照)</li>
+        <li><strong>5つの言語</strong> — イタリア語、英語、フランス語、ドイツ語、スペイン語</li>
+        <li><strong>カード・口座の照合</strong> <span class="beta-tag">(ベータ)</span> — クレジットカードの請求と元の支出をペアにして二重計上を回避<span class="beta-note">(エッジケースを精緻化中)</span></li>
+        <li><strong>内部送金の検出</strong> <span class="beta-tag">(ベータ)</span> — 自分の口座間の送金をマッチングしてダッシュボードを膨張させない<span class="beta-note">(エッジケースを精緻化中)</span></li>
+      </ul>
+    </section>
     <section id="download">
       <h2><span class="step-num">1</span>お使いの OS 用にダウンロード</h2>
       <p>公式インストーラーは各 <a href="https://github.com/drake69/spendify/releases/latest" target="_blank">GitHub Release</a> のアセットとして公開されています。OS に合ったフォーマットを選んでください。</p>

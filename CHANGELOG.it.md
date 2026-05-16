@@ -29,11 +29,17 @@ Il versioning segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pagina "Primo avvio" su gh-pages, copertura completa 9 lingue (`getting-started.{html,en,de,es,fr,ja,nl,pl,pt}.html`): guida illustrata a 3 step (Download → Installa → Primo avvio) con bottoni di download per DMG/MSIX/.deb/.rpm e placeholder per screenshot (`assets/screenshots/`). Ogni pagina include il beacon Cloudflare Web Analytics e il selettore lingua completo
 - Aggiornata la sezione "Primo avvio" di `installation_{macos,windows}.{md,it.md}` per descrivere il flusso nativo pywebview (splash + download modello + wizard onboarding), sostituendo la sequenza obsoleta Terminale/browser che vale solo per i vecchi script `install.sh`/`install.ps1`
 - Landing page (tutte le 9 lingue: `index.html` IT, `index.{en,de,es,fr,ja,nl,pl,pt}.html`): aggiunto CTA localizzato "Scarica installer" che punta alla pagina getting-started corrispondente alla lingua, sopra le tab esistenti con gli script curl
+- README riorganizzato per audience tecnica/sviluppatori (era misto end-user + dev): ridotto da 663 → ~180 righe, banner che dirige gli utenti finali alla getting-started su gh-pages, sei bullet "Cosa è implementato" con path file + RF-codes + beta tag onesti, sezione develop-locally con chiarimento Ollama vs llama.cpp, link reciproci IT·EN nella tabella documentazione
+- Nuovi `docs/architecture.{md,it.md}` con diagramma a layer e dettagli Flow 1 vs Flow 2 prima inseriti nel README
+- Nuovi `docs/design_decisions.{md,it.md}` con il razionale Decimal/SHA-256/invert_sign/RF-03/RF-04 prima nel README, con flag espliciti `(beta)` su RF-03 e RF-04
+- Nuova sezione "Cosa ottieni" su tutti i 9 `getting-started.*.html` con sei bullet user-value (tradotti in tutte le lingue) — framing complementare a "Cosa è implementato" del README
+- Sezione README "Cosa lascia la macchina" resa esplicita e onesta: esempio concreto before/after di redazione PII e ammissione che **importi** e **date** delle transazioni viaggiano comunque verso i backend LLM remoti nell'implementazione attuale (item di backlog AI-55 copre le modalità di redazione). Bullet privacy su tutti i 9 getting-started gh-pages riscritto con lo stesso tono onesto
 
 ### Fixed
 - Auto-invalidazione degli schemi: gli schemi in cache (Flow 1) con parse rate < 10% vengono eliminati automaticamente e ritentati con Flow 2 (riclassificazione LLM)
 - Pulizia schemi orfani: la migration di avvio rimuove le righe `document_schema` senza `header_sha256`, prevenendo voci stale irraggiungibili
 - Header SHA256 sempre popolato sullo schema prima del persist, evitando la creazione di schemi orfani
+- Crash del sanitizer su colonne pandas 2.x `string`-dtype con NaN: `astype(str).tolist()` lasciava trapelare float NaN nel sanitizer regex, sollevando `TypeError: expected string or bytes-like object, got 'float'` su import CSV bancari reali. Fix in `core/classifier.py` (`fillna("").astype(str)`) più guard difensivo in `core/sanitizer.py` (`redact_pii` coerce gli input non-string a `""`). 5 test di regressione in `tests/test_sanitizer.py::TestNonStringInputs` (#108)
 
 ## [0.1.0] - 2026-04-06
 
