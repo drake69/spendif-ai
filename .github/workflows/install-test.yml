@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout (to get install.sh from this commit)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run install.sh (non-interactive, skip browser open)
         run: bash installer/install.sh
