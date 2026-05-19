@@ -49,9 +49,15 @@ class TestDBBootstrap:
         url = f"sqlite:///{db_path}"
 
         # 1st run: create schema → .schema_hash written
-        create_tables(get_engine(url))
+        eng1 = get_engine(url)
+        create_tables(eng1)
         hash_file = tmp_path / ".schema_hash"
         assert hash_file.is_file()
+
+        # On Windows the SQLAlchemy connection pool keeps the SQLite file
+        # locked until the engine is disposed — without dispose(), the
+        # db_path.unlink() below raises PermissionError (WinError 32).
+        eng1.dispose()
 
         # Simulate user wiping the DB while .schema_hash survives
         db_path.unlink()
@@ -61,6 +67,7 @@ class TestDBBootstrap:
         create_tables(eng2)
         from sqlalchemy import inspect as _inspect
         assert "import_job" in _inspect(eng2).get_table_names()
+        eng2.dispose()
 
 
 # ── Prompt integrity ─────────────────────────────────────────────────────────
