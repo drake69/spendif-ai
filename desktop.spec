@@ -21,6 +21,13 @@ st_datas, st_binaries, st_hiddenimports = collect_all("streamlit")
 # Plotly needs its own data files
 plotly_datas = collect_data_files("plotly")
 
+# llama-cpp-python: imported lazily inside core.llm_backends, so PyInstaller
+# cannot discover it via static analysis. Pull in the python package AND the
+# shipped shared libs (libllama, libggml*, libmtmd, …) which ctypes loads at
+# runtime from `<llama_cpp>/lib/`. Without these the bundled app crashes on
+# first model load with `Shared library with base name 'llama' not found`.
+llama_datas, llama_binaries, llama_hiddenimports = collect_all("llama_cpp")
+
 # ---------------------------------------------------------------------------
 # Application packages to bundle alongside the frozen launcher
 # ---------------------------------------------------------------------------
@@ -95,7 +102,8 @@ hidden_imports = [
     "yaml",
     "dotenv",
     "webview",
-] + st_hiddenimports
+    "llama_cpp",
+] + st_hiddenimports + llama_hiddenimports
 
 # ---------------------------------------------------------------------------
 # Icon (platform-dependent)
@@ -116,8 +124,8 @@ elif sys.platform == "win32":
 a = Analysis(
     ["desktop/launcher.py"],
     pathex=["."],
-    binaries=st_binaries,
-    datas=app_datas + st_datas + plotly_datas,
+    binaries=st_binaries + llama_binaries,
+    datas=app_datas + st_datas + plotly_datas + llama_datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
