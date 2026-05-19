@@ -10,9 +10,17 @@
 # aligned across native bundles and the Docker image avoids drift.
 FROM python:3.13-slim
 
-# Build tools required by llama-cpp-python (compiled from source via scikit-build)
+# Pull the latest Debian security patches before installing anything else.
+# The base `python:3.13-slim` image is only rebuilt every few weeks, so its
+# system packages routinely lag behind upstream CVE fixes (Trivy was flagging
+# HIGH severity findings on libcap2 / libsystemd0 / libldap-common despite
+# Debian having published the patches already). Running `apt-get upgrade`
+# at build time picks them up without waiting for the python:slim image to
+# refresh.
 RUN apt-get update -qq && \
+    apt-get -y -qq upgrade && \
     apt-get install -y -qq --no-install-recommends gcc g++ cmake && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Installa uv
