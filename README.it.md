@@ -38,6 +38,18 @@ Registro finanziario personale unificato con pipeline ibrida deterministica + LL
 - **Riconciliazione carta-conto (RF-03, beta)** — algoritmo a 3 fasi in `core/normalizer.py`: appaia gli addebiti carta con le spese sottostanti per eliminare il double-counting *(edge cases ancora in raffinamento)*
 - **Rilevazione giroconti interni (RF-04, beta)** — matching su importo simbolico + finestra di ±7 giorni, con permutazioni dei nomi titolare per intercettare export tipo "Cognome Nome" *(edge cases ancora in raffinamento)*
 
+## Cosa arriva dopo
+
+Spendif.ai è in alpha test. Le funzioni che aggiungeremo le decidiamo insieme a chi usa l'app oggi: nessun lavoro speculativo, nessuna roadmap calata dall'alto.
+
+Funzioni in valutazione in base ai feedback degli alpha tester:
+
+- **Tracking del cash** — registrare manualmente le spese in contanti, senza estratto bancario
+- **Performance degli investimenti** — vedere a colpo d'occhio come stanno andando gli strumenti del portafoglio
+- **App mobile compagna** — registrare cash al volo dal telefono e sincronizzare col desktop
+
+Una di queste ti servirebbe? Faccelo sapere su [GitHub Discussions](https://github.com/drake69/spendify/discussions). Quando arrivano abbastanza richieste sulla stessa funzione, sale in cima alla coda.
+
 ## 👩‍💻 Sviluppo locale
 
 ```bash

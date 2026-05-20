@@ -38,6 +38,18 @@ Unified personal finance ledger with a hybrid deterministic + LLM pipeline. Aggr
 - **Card-account reconciliation (RF-03, beta)** — 3-phase algorithm in `core/normalizer.py`: pairs credit-card settlements with the underlying expenses to eliminate double-counting *(edge cases still being refined)*
 - **Internal transfer detection (RF-04, beta)** — symbolic-amount + ±7-day window matching, with owner-name permutations to catch "Cognome Nome" exports *(edge cases still being refined)*
 
+## What's coming next
+
+Spendif.ai is in alpha. The features we add next are decided together with the people using the app today: no speculative work, no roadmap dictated from above.
+
+Features under evaluation based on alpha-tester feedback:
+
+- **Cash tracking** — log cash purchases manually, with no bank statement attached
+- **Investment performance** — see at a glance how the instruments in your portfolio are doing
+- **Companion mobile app** — capture cash on the fly from your phone and sync with the desktop
+
+Would one of these help you? Tell us in [GitHub Discussions](https://github.com/drake69/spendify/discussions). When enough requests stack up on the same feature, it moves to the top of the queue.
+
 ## 👩‍💻 Develop locally
 
 ```bash
