@@ -72,10 +72,17 @@ class CategoryService:
         if backend is None:
             config = self._config_from_settings(settings)
             backend = _build_categorizer_backend(config) or _build_backend(config)
-        # C-08-cascade: load (or build) NSI taxonomy_map
+        # C-08-cascade: load (or build) NSI taxonomy_map.
+        # IMPORTANT: never pass the LLM backend here — a fresh DB would
+        # trigger a single 70-tag LLM call inside the import path that takes
+        # 5-15 min on a local 12B-Q4 model with no visible progress (one
+        # large grammar-constrained generation in llama.cpp's C layer, no
+        # Python logging). The onboarding wizard runs the LLM mapping
+        # explicitly with a visible spinner; here we degrade to the static
+        # fallback only, so the import path is always fast.
         nsi_svc = NsiTaxonomyService(self.engine)
         with self._session() as s:
-            taxonomy_map = nsi_svc.get_or_build(s, taxonomy, backend)
+            taxonomy_map = nsi_svc.get_or_build(s, taxonomy, llm_backend=None)
         return categorize_batch(
             transactions=transactions,
             taxonomy=taxonomy,
@@ -88,6 +95,28 @@ class CategoryService:
             progress_callback=progress_callback,
             taxonomy_map=taxonomy_map,
         )
+
+    def prewarm_nsi_taxonomy_map(self) -> bool:
+        """Run the single ~5 min LLM call that maps OSM tags to the user's
+        taxonomy and persists it in `nsi_tag_mapping`. Intended for the
+        onboarding wizard's "Categorie" step. Catches every exception and
+        returns False on failure — at import time the static fallback in
+        NsiTaxonomyService still covers us.
+        """
+        try:
+            from services.nsi_taxonomy_service import NsiTaxonomyService
+            from core.orchestrator import _build_backend, _build_categorizer_backend
+            with self._session() as s:
+                settings = repository.get_all_user_settings(s)
+                taxonomy = repository.get_taxonomy_config(s)
+            config = self._config_from_settings(settings)
+            backend = _build_categorizer_backend(config) or _build_backend(config)
+            nsi = NsiTaxonomyService(self.engine)
+            with self._session() as s:
+                nsi.build(s, taxonomy, llm_backend=backend)
+            return True
+        except Exception:
+            return False
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 

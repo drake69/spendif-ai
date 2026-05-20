@@ -106,18 +106,36 @@ def get_recommended_model(ram_gb: int) -> ModelInfo | None:
     whose RAM key is the largest that fits in ``ram_gb``.
     Returns None if no model fits.
     """
+    chain = get_fallback_chain(ram_gb)
+    return chain[0] if chain else None
+
+
+def get_fallback_chain(ram_gb: int) -> list[ModelInfo]:
+    """Return the recommended model PLUS smaller fallbacks, largest first.
+
+    Use this when the caller wants to try the recommended model and
+    automatically fall back to a smaller one if the download fails (e.g.
+    the HuggingFace repo went private or returned 404). Returns an empty
+    list if no model in the registry fits ``ram_gb``.
+    """
     reg = _load_registry()
     tier_map = reg.get("default_tier_map", {})
     models_by_id = {m["id"]: m for m in reg.get("models", [])}
 
-    # Find best tier: largest key <= ram_gb
-    best_id = None
-    for threshold in sorted(int(k) for k in tier_map):
-        if threshold <= ram_gb:
-            best_id = tier_map[threshold]
+    # Tier thresholds ≤ ram_gb, largest first
+    candidate_tiers = sorted(
+        (int(k) for k in tier_map if int(k) <= ram_gb),
+        reverse=True,
+    )
 
-    if best_id and best_id in models_by_id:
-        m = models_by_id[best_id]
-        return ModelInfo(**{k: v for k, v in m.items()})
-
-    return None
+    chain: list[ModelInfo] = []
+    seen_ids: set[str] = set()
+    for tier in candidate_tiers:
+        model_id = tier_map[tier]
+        if model_id in seen_ids:
+            continue
+        seen_ids.add(model_id)
+        m = models_by_id.get(model_id)
+        if m:
+            chain.append(ModelInfo(**{k: v for k, v in m.items()}))
+    return chain

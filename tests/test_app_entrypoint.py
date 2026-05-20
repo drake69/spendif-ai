@@ -41,6 +41,34 @@ class TestDBBootstrap:
         url = os.getenv("SPENDIFAI_DB", "sqlite:///ledger.db")
         assert url.startswith("sqlite:///")
 
+    def test_orphan_schema_hash_does_not_skip_create(self, tmp_path):
+        """Regression: if the DB file is deleted but `.schema_hash` lingers,
+        the fast-path must NOT skip create_all (would leave tables missing
+        and raise `no such table` at first query)."""
+        db_path = tmp_path / "test.db"
+        url = f"sqlite:///{db_path}"
+
+        # 1st run: create schema → .schema_hash written
+        eng1 = get_engine(url)
+        create_tables(eng1)
+        hash_file = tmp_path / ".schema_hash"
+        assert hash_file.is_file()
+
+        # On Windows the SQLAlchemy connection pool keeps the SQLite file
+        # locked until the engine is disposed — without dispose(), the
+        # db_path.unlink() below raises PermissionError (WinError 32).
+        eng1.dispose()
+
+        # Simulate user wiping the DB while .schema_hash survives
+        db_path.unlink()
+
+        # 2nd run on a fresh engine must rebuild the schema
+        eng2 = get_engine(url)
+        create_tables(eng2)
+        from sqlalchemy import inspect as _inspect
+        assert "import_job" in _inspect(eng2).get_table_names()
+        eng2.dispose()
+
 
 # ── Prompt integrity ─────────────────────────────────────────────────────────
 
@@ -78,7 +106,12 @@ class TestStaleJobReset:
 class TestOnboardingGate:
     """Verify onboarding detection (lines 80-85)."""
 
-    def test_fresh_db_onboarding_auto_set(self, tmp_path):
+    def test_fresh_db_onboarding_NOT_auto_set(self, tmp_path):
+        """Regression for #AI-58: a brand-new DB must NOT be flagged as
+        already-onboarded just because the migration chain seeded the
+        default taxonomy. The auto-skip migration now needs all four
+        wizard prerequisites (ui_language, owner_names, llm_backend,
+        ≥1 account) — none are set on a fresh DB."""
         from services.settings_service import SettingsService
 
         db_path = tmp_path / "test.db"
@@ -86,9 +119,7 @@ class TestOnboardingGate:
         create_tables(eng)
 
         svc = SettingsService(eng)
-        # create_tables seeds taxonomy defaults + sets onboarding_done
-        # for DBs that already have taxonomy rows (migration logic)
-        assert svc.is_onboarding_done() is True
+        assert svc.is_onboarding_done() is False
 
     def test_after_onboarding_done(self, tmp_path):
         from services.settings_service import SettingsService

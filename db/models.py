@@ -33,6 +33,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    inspect,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship
 
@@ -108,14 +109,29 @@ def _schema_hash_path(engine) -> pathlib.Path:
     return pathlib.Path("")
 
 
+def _db_has_tables(engine) -> bool:
+    """True if the engine's database has at least one user table.
+
+    Used to invalidate the .schema_hash fast-path when the DB file was
+    deleted (or recreated empty) while the hash cache lingered.
+    """
+    try:
+        return bool(inspect(engine).get_table_names())
+    except Exception:
+        return False
+
+
 def create_tables(engine=None):
     if engine is None:
         engine = get_engine()
 
     # ── fast-path: skip migrations if models.py hasn't changed ───────
+    # Guard: only trust the hash cache if the DB actually has tables.
+    # If the DB file was deleted (or is empty) while .schema_hash lingered,
+    # skipping create_all leaves an empty schema → runtime "no such table".
     current_hash = _schema_hash()
     hash_file = _schema_hash_path(engine)
-    if hash_file.name and hash_file.is_file():
+    if hash_file.name and hash_file.is_file() and _db_has_tables(engine):
         try:
             saved = hash_file.read_text().strip()
             if saved == current_hash:
@@ -775,12 +791,33 @@ def _migrate_add_import_batch_tracking(engine) -> None:
 
 
 def _migrate_set_onboarding_done_for_existing_users(engine) -> None:
-    """Mark onboarding as complete for DBs that already have taxonomy data.
+    """Mark onboarding as complete only when ALL prerequisites the wizard
+    would have configured are already present on the DB.
 
-    Prevents existing users from seeing the onboarding wizard after upgrading.
-    Runs after all other migrations so taxonomy_category is guaranteed to exist.
-    Condition: taxonomy_category has rows (= app was already set up before onboarding
-    was introduced).  Does nothing if onboarding_done is already set.
+    The onboarding wizard collects:
+      * ``owner_names``  — required for import (transactions need owners)
+      * ``ui_language``  — controls all i18n strings
+      * a default taxonomy applied to the user's catalogue
+      * at least one account
+      * (eventually) real imported transactions
+
+    Skipping the wizard is only safe when the user has actually used the app
+    before and ALL of those signals are present. Checking ``taxonomy_category``
+    alone (the previous heuristic) was wrong because the default taxonomy is
+    auto-seeded on every fresh install — every new user was silently flagged
+    as "already onboarded" (#AI-58).
+
+    Conditions to skip (ALL must hold):
+      1. ``ui_language`` setting is set         — language pref configured
+      2. ``owner_names`` setting is non-empty  — required for import
+      3. at least one ``account`` row exists   — accounts step completed
+      4. ``llm_backend`` setting is non-empty  — LLM defaults configured
+
+    Note that the presence of ``transaction`` rows is NOT a prerequisite:
+    a user can legitimately complete the wizard and only later import data.
+
+    Does nothing if ``onboarding_done`` is already set explicitly (true or
+    false) — that's a deliberate user/test override, not a heuristic call.
     """
     from sqlalchemy import text as _text
     with engine.connect() as conn:
@@ -789,13 +826,30 @@ def _migrate_set_onboarding_done_for_existing_users(engine) -> None:
         )).scalar()
         if existing is not None:
             return  # already decided — don't touch
-        count = conn.execute(_text("SELECT COUNT(*) FROM taxonomy_category")).scalar()
-        if count and count > 0:
-            conn.execute(_text(
-                "INSERT OR REPLACE INTO user_settings (key, value) "
-                "VALUES ('onboarding_done', 'true')"
-            ))
-            conn.commit()
+
+        def _setting(key: str) -> str | None:
+            return conn.execute(_text(
+                "SELECT value FROM user_settings WHERE key = :k"
+            ), {"k": key}).scalar()
+
+        owner_names = (_setting("owner_names") or "").strip()
+        ui_language = (_setting("ui_language") or "").strip()
+        llm_backend = (_setting("llm_backend") or "").strip()
+        if not owner_names or not ui_language or not llm_backend:
+            return
+
+        try:
+            acct_count = conn.execute(_text("SELECT COUNT(*) FROM account")).scalar() or 0
+        except Exception:
+            acct_count = 0
+        if acct_count <= 0:
+            return
+
+        conn.execute(_text(
+            "INSERT OR REPLACE INTO user_settings (key, value) "
+            "VALUES ('onboarding_done', 'true')"
+        ))
+        conn.commit()
 
 
 def _migrate_add_header_sha256(engine) -> None:

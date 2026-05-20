@@ -230,49 +230,214 @@ class TestOnboardingFlag:
         assert svc.is_onboarding_done() is True
 
 
+# ── Apply taxonomy overrides (wizard step 3 — rename + disable) ───────────────
+
+class TestApplyTaxonomyOverrides:
+    """SettingsService.apply_taxonomy_overrides is used by the onboarding
+    Taxonomy step to let the user tweak the default template without
+    rebuilding the full taxonomy editor inside the wizard."""
+
+    def _count_named(self, engine, name: str) -> int:
+        with engine.connect() as conn:
+            return conn.execute(text(
+                "SELECT COUNT(*) FROM taxonomy_category WHERE name = :n"
+            ), {"n": name}).scalar() or 0
+
+    def _total(self, engine) -> int:
+        with engine.connect() as conn:
+            return conn.execute(text("SELECT COUNT(*) FROM taxonomy_category")).scalar() or 0
+
+    def test_no_overrides_is_a_noop(self, engine, svc):
+        svc.apply_default_taxonomy("it")
+        n_before = self._total(engine)
+        svc.apply_taxonomy_overrides()
+        assert self._total(engine) == n_before
+
+    def test_deletion_removes_category(self, engine, svc):
+        svc.apply_default_taxonomy("it")
+        assert self._count_named(engine, "Trasporti") == 1
+        n_before = self._total(engine)
+        svc.apply_taxonomy_overrides(deletions=["Trasporti"])
+        assert self._count_named(engine, "Trasporti") == 0
+        assert self._total(engine) == n_before - 1
+
+    def test_rename_changes_name(self, engine, svc):
+        svc.apply_default_taxonomy("it")
+        svc.apply_taxonomy_overrides(renames={"Casa": "Abitazione"})
+        assert self._count_named(engine, "Casa") == 0
+        assert self._count_named(engine, "Abitazione") == 1
+
+    def test_deletion_wins_over_rename_on_same_category(self, engine, svc):
+        svc.apply_default_taxonomy("it")
+        svc.apply_taxonomy_overrides(
+            renames={"Casa": "Abitazione"},
+            deletions=["Casa"],
+        )
+        assert self._count_named(engine, "Casa") == 0
+        assert self._count_named(engine, "Abitazione") == 0
+
+    def test_rename_to_empty_or_same_is_ignored(self, engine, svc):
+        svc.apply_default_taxonomy("it")
+        svc.apply_taxonomy_overrides(renames={"Casa": "", "Trasporti": "Trasporti"})
+        assert self._count_named(engine, "Casa") == 1
+        assert self._count_named(engine, "Trasporti") == 1
+
+    def test_subcategory_rename_uses_original_parent_name(self, engine, svc):
+        """Subcategory edits key by the ORIGINAL parent name even after the
+        parent itself is renamed — otherwise the user has to know that renames
+        happen first and adjust their keys, which is too leaky an abstraction
+        to leak into the wizard's edit dict."""
+        svc.apply_default_taxonomy("it")
+        svc.apply_taxonomy_overrides(
+            renames={"Casa": "Abitazione"},
+            sub_renames={("Casa", "Mutuo / Affitto"): "Mutuo"},
+        )
+        with engine.connect() as conn:
+            subs = conn.execute(text(
+                "SELECT s.name FROM taxonomy_subcategory s "
+                "JOIN taxonomy_category c ON s.category_id = c.id "
+                "WHERE c.name = :n ORDER BY s.sort_order"
+            ), {"n": "Abitazione"}).fetchall()
+        names = [r[0] for r in subs]
+        assert "Mutuo" in names
+        assert "Mutuo / Affitto" not in names
+
+    def test_subcategory_deletion(self, engine, svc):
+        svc.apply_default_taxonomy("it")
+        svc.apply_taxonomy_overrides(
+            sub_deletions=[("Casa", "Condominio")],
+        )
+        with engine.connect() as conn:
+            still_there = conn.execute(text(
+                "SELECT COUNT(*) FROM taxonomy_subcategory s "
+                "JOIN taxonomy_category c ON s.category_id = c.id "
+                "WHERE c.name = 'Casa' AND s.name = 'Condominio'"
+            )).scalar()
+        assert still_there == 0
+
+    def test_subcategory_edits_skip_deleted_parents(self, engine, svc):
+        """If the user disables the whole Casa category, the subcategory
+        edits scoped to ('Casa', ...) become silent no-ops — they would
+        otherwise raise (parent not found in the lookup map)."""
+        svc.apply_default_taxonomy("it")
+        # Should not raise
+        svc.apply_taxonomy_overrides(
+            deletions=["Casa"],
+            sub_renames={("Casa", "Mutuo / Affitto"): "Mutuo"},
+        )
+        assert self._count_named(engine, "Casa") == 0
+
+
 # ── Auto-skip migration for existing users ────────────────────────────────────
 
 class TestAutoSkipMigration:
-    def test_existing_db_with_taxonomy_gets_onboarding_done(self):
-        """Simulate an existing installation: taxonomy populated before migration runs."""
+    """Migration auto-skip detects 'real existing user' via the 4 signals the
+    onboarding wizard would have set: ui_language, owner_names, llm_backend,
+    and at least one account row.
+    """
+
+    @staticmethod
+    def _seed_user_settings(conn, **overrides):
+        """Insert the four required signals; tests override one to assert each guard."""
+        defaults = {
+            "ui_language": "it",
+            "owner_names": "Mario Rossi",
+            "llm_backend": "local_llama_cpp",
+        }
+        defaults.update(overrides)
+        for k, v in defaults.items():
+            conn.execute(text(
+                "INSERT OR REPLACE INTO user_settings (key, value) VALUES (:k, :v)"
+            ), {"k": k, "v": v})
+
+    @staticmethod
+    def _seed_account(conn):
+        conn.execute(text(
+            "INSERT INTO account (name, bank_name, account_type) "
+            "VALUES ('main', 'Bank', 'bank_account')"
+        ))
+
+    def _new_engine_with_migrations(self):
         from sqlalchemy import create_engine as _ce
         from db.models import (
             Base,
             _migrate_add_user_settings,
             _migrate_add_taxonomy_default,
             _migrate_add_taxonomy,
-            _migrate_set_onboarding_done_for_existing_users,
         )
         eng = _ce("sqlite:///:memory:", connect_args={"check_same_thread": False})
         Base.metadata.create_all(eng)
         _migrate_add_user_settings(eng)
         _migrate_add_taxonomy_default(eng)
-        _migrate_add_taxonomy(eng)          # seeds taxonomy_category
+        _migrate_add_taxonomy(eng)
+        return eng
+
+    def test_returning_user_with_all_signals_skips_wizard(self):
+        """All 4 prerequisites present → migration marks onboarding_done."""
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn)
+            self._seed_account(conn)
+            conn.commit()
         _migrate_set_onboarding_done_for_existing_users(eng)
 
         svc = SettingsService(eng)
         assert svc.is_onboarding_done() is True
 
-    def test_empty_db_does_not_get_onboarding_done(self):
-        """A fresh DB with no taxonomy rows must NOT get onboarding_done=true."""
-        from sqlalchemy import create_engine as _ce
-        from db.models import (
-            Base,
-            _migrate_add_user_settings,
-            _migrate_add_taxonomy_default,
-            _migrate_set_onboarding_done_for_existing_users,
-        )
-        eng = _ce("sqlite:///:memory:", connect_args={"check_same_thread": False})
-        Base.metadata.create_all(eng)
-        _migrate_add_user_settings(eng)
-        _migrate_add_taxonomy_default(eng)
-        # NOTE: _migrate_add_taxonomy NOT called → taxonomy_category is empty
+    def test_fresh_db_with_only_seeded_taxonomy_does_not_skip_onboarding(self):
+        """Regression for #AI-58: default taxonomy seed alone must not trigger skip."""
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        # No user_settings overrides → owner_names/ui_language/llm_backend missing
+        _migrate_set_onboarding_done_for_existing_users(eng)
+
+        svc = SettingsService(eng)
+        assert svc.is_onboarding_done() is False
+
+    def test_missing_owner_names_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
         with eng.connect() as conn:
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS taxonomy_category "
-                "(id INTEGER PRIMARY KEY, name TEXT, type TEXT, sort_order INTEGER)"
-            ))
+            self._seed_user_settings(conn, owner_names="")
+            self._seed_account(conn)
             conn.commit()
+        _migrate_set_onboarding_done_for_existing_users(eng)
+
+        svc = SettingsService(eng)
+        assert svc.is_onboarding_done() is False
+
+    def test_missing_ui_language_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn, ui_language="")
+            self._seed_account(conn)
+            conn.commit()
+        _migrate_set_onboarding_done_for_existing_users(eng)
+
+        svc = SettingsService(eng)
+        assert svc.is_onboarding_done() is False
+
+    def test_missing_llm_backend_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn, llm_backend="")
+            self._seed_account(conn)
+            conn.commit()
+        _migrate_set_onboarding_done_for_existing_users(eng)
+
+        svc = SettingsService(eng)
+        assert svc.is_onboarding_done() is False
+
+    def test_missing_account_blocks_skip(self):
+        from db.models import _migrate_set_onboarding_done_for_existing_users
+        eng = self._new_engine_with_migrations()
+        with eng.connect() as conn:
+            self._seed_user_settings(conn)
+            conn.commit()
+        # No account inserted
         _migrate_set_onboarding_done_for_existing_users(eng)
 
         svc = SettingsService(eng)

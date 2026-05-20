@@ -52,8 +52,13 @@ models:
     name: Gemma-3-12B-it
     params: "12B"
     quant: Q4_K_M
-    filename: gemma-3-12b-it-Q4_K_M.gguf
-    repo: google/gemma-3-12b-it-GGUF
+    # bartowski's public re-up of google/gemma-3-12b-it-GGUF. The original
+    # Google repo is gated (license accept + HF login required) so anonymous
+    # downloads get HTTP 401. Bartowski mirrors keep the same content but
+    # are public; their convention is "<org>_<model>-<quant>.gguf" for
+    # re-ups of organisation-owned models (closes AI-59).
+    filename: google_gemma-3-12b-it-Q4_K_M.gguf
+    repo: bartowski/google_gemma-3-12b-it-GGUF
     size_mb: 6800
     ram_min_gb: 16
     tier: premium
@@ -63,7 +68,7 @@ models:
 # The loader picks the entry whose key is <= detected RAM.
 # Keys must be sorted ascending.
 default_tier_map:
-  4: qwen2.5-1.5b
+  2: qwen2.5-1.5b
   8: qwen2.5-3b
   12: qwen2.5-7b
   16: gemma-3-12b

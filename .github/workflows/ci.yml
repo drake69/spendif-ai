@@ -327,10 +327,16 @@ jobs:
             || true
           # Strict gate: fail on known CVEs with available fixes.
           # --ignore-vuln for CVEs without upstream fix (no action possible).
+          #   CVE-2025-69872 — no fix release available
+          #   PYSEC-2025-183 — pyjwt 2.12.1 transitive dep of semgrep,
+          #                    no fix release available (semgrep pin
+          #                    forces pyjwt~=2.12.0). Re-evaluate on
+          #                    each semgrep upgrade.
           uv run pip-audit \
             --requirement <(uv pip freeze) \
             --strict \
-            --ignore-vuln CVE-2025-69872
+            --ignore-vuln CVE-2025-69872 \
+            --ignore-vuln PYSEC-2025-183
 
       - name: Upload pip-audit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
