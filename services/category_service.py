@@ -96,6 +96,28 @@ class CategoryService:
             taxonomy_map=taxonomy_map,
         )
 
+    def prewarm_nsi_taxonomy_map(self) -> bool:
+        """Run the single ~5 min LLM call that maps OSM tags to the user's
+        taxonomy and persists it in `nsi_tag_mapping`. Intended for the
+        onboarding wizard's "Categorie" step. Catches every exception and
+        returns False on failure — at import time the static fallback in
+        NsiTaxonomyService still covers us.
+        """
+        try:
+            from services.nsi_taxonomy_service import NsiTaxonomyService
+            from core.orchestrator import _build_backend, _build_categorizer_backend
+            with self._session() as s:
+                settings = repository.get_all_user_settings(s)
+                taxonomy = repository.get_taxonomy_config(s)
+            config = self._config_from_settings(settings)
+            backend = _build_categorizer_backend(config) or _build_backend(config)
+            nsi = NsiTaxonomyService(self.engine)
+            with self._session() as s:
+                nsi.build(s, taxonomy, llm_backend=backend)
+            return True
+        except Exception:
+            return False
+
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     @staticmethod

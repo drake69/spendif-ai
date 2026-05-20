@@ -887,29 +887,14 @@ def _persist_choices(
 
 
 def _run_nsi_prewarm(cfg_svc: SettingsService) -> bool:
-    """Single LLM call that maps OSM tags → (category, subcategory) for the
-    user's chosen taxonomy. Runs once at step 4 of the wizard; the import
-    path uses the static fallback only. Returns True on success, False on
-    any failure (non-fatal: static fallback covers us at first import)."""
-    try:
-        from services.nsi_taxonomy_service import NsiTaxonomyService
-        from services.category_service import CategoryService
-        from core.orchestrator import _build_backend, _build_categorizer_backend
-        from db import repository as _repo
-        from db.models import get_session as _get_session
-
-        with _get_session(cfg_svc.engine) as _s:
-            _settings = _repo.get_all_user_settings(_s)
-            _taxonomy = _repo.get_taxonomy_config(_s)
-        _config = CategoryService._config_from_settings(_settings)
-        _backend = _build_categorizer_backend(_config) or _build_backend(_config)
-        _nsi = NsiTaxonomyService(cfg_svc.engine)
-        with _get_session(cfg_svc.engine) as _s:
-            _nsi.build(_s, _taxonomy, llm_backend=_backend)
-        return True
-    except Exception as _exc:
-        logger.warning(f"onboarding: NSI pre-warm failed ({_exc!r}) — static fallback at import time")
-        return False
+    """Delegate the one-shot LLM mapping of OSM tags → taxonomy to the
+    service layer. Wrapper keeps the wizard step short and avoids importing
+    core/db from the UI layer (coupling gate)."""
+    from services.category_service import CategoryService
+    ok = CategoryService(cfg_svc.engine).prewarm_nsi_taxonomy_map()
+    if not ok:
+        logger.warning("onboarding: NSI pre-warm failed — static fallback at import time")
+    return ok
 
 
 def _finalise_onboarding(cfg_svc: SettingsService) -> None:
