@@ -560,3 +560,17 @@ In Analytics trovi il pulsante **Esporta** che genera HTML, CSV o XLSX.
 
 **Ho cambiato la tassonomia ma le transazioni vecchie non si sono aggiornate.**
 Le categorie vecchie rimangono come sono. Puoi rielaborarle manualmente dalla pagina Review o ri-applicando le regole.
+
+---
+
+## Cosa arriva dopo
+
+Spendif.ai è in alpha test. Le funzioni che aggiungeremo le decidiamo insieme a chi usa l'app oggi: nessun lavoro speculativo, nessuna roadmap calata dall'alto.
+
+Funzioni in valutazione in base ai feedback degli alpha tester:
+
+- **Tracking del cash** — registrare manualmente le spese in contanti, senza estratto bancario
+- **Performance degli investimenti** — vedere a colpo d'occhio come stanno andando gli strumenti del portafoglio
+- **App mobile compagna** — registrare cash al volo dal telefono e sincronizzare col desktop
+
+Una di queste ti servirebbe? Faccelo sapere su [GitHub Discussions](https://github.com/drake69/spendify/discussions). Quando arrivano abbastanza richieste sulla stessa funzione, sale in cima alla coda.

@@ -558,3 +558,17 @@ In Analytics you'll find the **Esporta** button which generates HTML, CSV, or XL
 
 **I changed the Taxonomy but the old transactions haven't updated.**
 Old categories stay as they are. You can reprocess them manually from the Review page or by re-applying the rules.
+
+---
+
+## What's coming next
+
+Spendif.ai is in alpha. The features we add next are decided together with the people using the app today: no speculative work, no roadmap dictated from above.
+
+Features under evaluation based on alpha-tester feedback:
+
+- **Cash tracking** — log cash purchases manually, with no bank statement attached
+- **Investment performance** — see at a glance how the instruments in your portfolio are doing
+- **Companion mobile app** — capture cash on the fly from your phone and sync with the desktop
+
+Would one of these help you? Tell us in [GitHub Discussions](https://github.com/drake69/spendify/discussions). When enough requests stack up on the same feature, it moves to the top of the queue.
