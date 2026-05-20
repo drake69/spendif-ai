@@ -205,9 +205,27 @@ _INSTANCE_LOCK_FILE = _SPENDIFAI_HOME / "launcher.lock"
 
 
 def _pid_alive(pid: int) -> bool:
-    """True if pid refers to a live process. PID 0/1 always returns False."""
+    """True if pid refers to a live process. PID 0/1 always returns False.
+
+    On Unix we use the classic ``os.kill(pid, 0)`` probe. On Windows that
+    same call has a different semantics: signal 0 is interpreted as SIGINT
+    and CPython delivers it via GenerateConsoleCtrlEvent — for large or
+    invalid PIDs the kernel ends up signalling the current console group,
+    which lands as a KeyboardInterrupt in the caller. Use a tasklist probe
+    instead, which is read-only and never delivers signals.
+    """
     if pid <= 1:
         return False
+    if sys.platform == "win32":
+        try:
+            r = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True, text=True, timeout=3,
+            )
+        except (subprocess.SubprocessError, OSError):
+            return False
+        # Empty / "INFO: No tasks are running..." → not alive.
+        return str(pid) in (r.stdout or "")
     try:
         os.kill(pid, 0)
         return True
