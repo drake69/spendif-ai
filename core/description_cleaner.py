@@ -71,7 +71,7 @@ def clean_descriptions_batch(
     transactions: list[dict],
     llm_backend: LLMBackend,
     fallback_backend: LLMBackend | None = None,
-    batch_size: int = 30,
+    batch_size: int = 15,
     source_name: str = "unknown",
     sanitize_config: SanitizationConfig | None = None,
 ) -> list[dict]:
