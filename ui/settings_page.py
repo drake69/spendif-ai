@@ -534,6 +534,43 @@ def render_settings_page(engine):
 
     st.divider()
 
+    # ── Database info ─────────────────────────────────────────────────────────
+    st.subheader(t("settings.db_info.title"))
+    st.caption(t("settings.db_info.caption"))
+    _db_info = cfg_svc.get_db_info()
+    _info_col_a, _info_col_b = st.columns([1, 2], vertical_alignment="center")
+    with _info_col_a:
+        st.markdown(f"**{t('settings.db_info.type')}**")
+    with _info_col_b:
+        st.markdown(_db_info["display_label"])
+    _info_col_a, _info_col_b = st.columns([1, 2], vertical_alignment="center")
+    with _info_col_a:
+        _location_label = (
+            t("settings.db_info.path") if _db_info["kind"] == "file" else t("settings.db_info.address")
+        )
+        st.markdown(f"**{_location_label}**")
+    with _info_col_b:
+        # Use code formatting so long paths / connection strings stay
+        # readable on narrow viewports and the user can click-copy.
+        st.code(_db_info["location"], language=None)
+    if _db_info["kind"] == "file":
+        _info_col_a, _info_col_b = st.columns([1, 2], vertical_alignment="center")
+        with _info_col_a:
+            st.markdown(f"**{t('settings.db_info.size')}**")
+        with _info_col_b:
+            if _db_info.get("file_exists"):
+                st.markdown(f"{_db_info['file_size_mb']:.1f} MB")
+            else:
+                st.markdown(f"⚠️ {t('settings.db_info.file_missing')}")
+    elif _db_info["kind"] == "server" and _db_info.get("user"):
+        _info_col_a, _info_col_b = st.columns([1, 2], vertical_alignment="center")
+        with _info_col_a:
+            st.markdown(f"**{t('settings.db_info.user')}**")
+        with _info_col_b:
+            st.markdown(_db_info["user"])
+
+    st.divider()
+
     # ── Schema cache ──────────────────────────────────────────────────────────
     st.subheader(t("settings.schema_cache_title"))
     st.caption(t("settings.schema_cache_caption"))

@@ -854,5 +854,13 @@
   "home.charts.unknown": "Unknown",
   "home.charts.uncategorised": "Uncategorised",
   "home.charts.uncategorised_sub": "Uncategorised",
-  "home.charts.no_income": "No classified income to display"
+  "home.charts.no_income": "No classified income to display",
+  "settings.db_info.title": "🗄️ Database",
+  "settings.db_info.caption": "Where your data lives. All transactions, settings and rules are stored here.",
+  "settings.db_info.type": "Type",
+  "settings.db_info.path": "File path",
+  "settings.db_info.address": "Server address",
+  "settings.db_info.size": "Size",
+  "settings.db_info.user": "User",
+  "settings.db_info.file_missing": "File missing — will be recreated on next launch"
 }
