@@ -824,9 +824,10 @@ def _step6_first_import(cfg_svc: SettingsService, lang: str) -> None:
             key="_ob_fi_skip",
             help=t("onboarding.first_import.skip_help"),
         ):
-            # Home page does not exist yet — land on Import for now.
-            # Switch to "home" when the Home page is implemented.
-            _exit_onboarding(target_page="import")
+            # Home page exists now; "skip" lands the user there. Its empty
+            # state shows a CTA back to Import — coherent with the routing
+            # already managed by app.py's has_transactions() guard.
+            _exit_onboarding(target_page="home")
 
 
 def _persist_choices(

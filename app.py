@@ -147,7 +147,11 @@ from ui.sidebar import render_sidebar
 page = render_sidebar()
 
 # ── Route ─────────────────────────────────────────────────────────────────────
-if page == "import":
+if page == "home":
+    from ui.home_page import render_home_page
+    render_home_page(engine)
+
+elif page == "import":
     from ui.upload_page import render_upload_page
     render_upload_page(engine)
 
