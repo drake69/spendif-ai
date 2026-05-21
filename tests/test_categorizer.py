@@ -104,3 +104,62 @@ class TestCategorizationCascade:
         assert result.category == "Altro"
         assert result.to_review is True
         assert result.confidence == Confidence.low
+
+
+class TestLlmExplicitFallback:
+    """The LLM picking the fallback pair on purpose ("Altro / Spese non
+    classificate") must surface in the Review queue regardless of the
+    confidence it claims — semantically equivalent to "I don't know"."""
+
+    def test_explicit_fallback_pair_forces_to_review_even_at_high_confidence(self):
+        from core.categorizer import _validate_llm_result, TaxonomyConfig
+        from decimal import Decimal
+
+        taxonomy = TaxonomyConfig(
+            expenses={
+                "Alimentari": ["Spesa supermercato"],
+                "Altro": ["Spese non classificate"],
+            },
+            income={"Lavoro": ["Stipendio"]},
+        )
+        item = {
+            "category": "Altro",
+            "subcategory": "Spese non classificate",
+            "confidence": "high",
+            "rationale": "modello pigro",
+        }
+        result = _validate_llm_result(
+            item, taxonomy.expenses, taxonomy,
+            amount=Decimal("-25.0"), direction="expense",
+            fallback_categories=None,
+        )
+        assert result.category == "Altro"
+        assert result.subcategory == "Spese non classificate"
+        assert result.to_review is True, "explicit fallback pair must always be to_review"
+        assert result.confidence == Confidence.low, "confidence must be coerced to low"
+
+    def test_real_category_at_high_confidence_does_not_force_review(self):
+        """Regression guard: non-fallback pairs keep the LLM's confidence."""
+        from core.categorizer import _validate_llm_result, TaxonomyConfig
+        from decimal import Decimal
+
+        taxonomy = TaxonomyConfig(
+            expenses={
+                "Alimentari": ["Spesa supermercato"],
+                "Altro": ["Spese non classificate"],
+            },
+            income={"Lavoro": ["Stipendio"]},
+        )
+        item = {
+            "category": "Alimentari",
+            "subcategory": "Spesa supermercato",
+            "confidence": "high",
+            "rationale": "evident",
+        }
+        result = _validate_llm_result(
+            item, taxonomy.expenses, taxonomy,
+            amount=Decimal("-25.0"), direction="expense",
+            fallback_categories=None,
+        )
+        assert result.to_review is False
+        assert result.confidence == Confidence.high
