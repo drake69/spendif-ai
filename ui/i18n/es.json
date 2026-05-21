@@ -869,5 +869,13 @@
   "settings.db_info.address": "Dirección del servidor",
   "settings.db_info.size": "Tamaño",
   "settings.db_info.user": "Usuario",
-  "settings.db_info.file_missing": "Archivo no encontrado — se recreará en el próximo arranque"
+  "settings.db_info.file_missing": "Archivo no encontrado — se recreará en el próximo arranque",
+  "home.period.label": "Período",
+  "home.period.current_year": "Año actual",
+  "home.period.current_quarter": "Trimestre actual",
+  "home.period.current_month": "Mes actual",
+  "home.period.last_12_months": "Últimos 12 meses",
+  "home.period.custom": "Personalizado",
+  "home.period.from": "Desde",
+  "home.period.to": "Hasta"
 }

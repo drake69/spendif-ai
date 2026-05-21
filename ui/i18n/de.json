@@ -869,5 +869,13 @@
   "settings.db_info.address": "Serveradresse",
   "settings.db_info.size": "Größe",
   "settings.db_info.user": "Benutzer",
-  "settings.db_info.file_missing": "Datei fehlt — wird beim nächsten Start neu erstellt"
+  "settings.db_info.file_missing": "Datei fehlt — wird beim nächsten Start neu erstellt",
+  "home.period.label": "Zeitraum",
+  "home.period.current_year": "Aktuelles Jahr",
+  "home.period.current_quarter": "Aktuelles Quartal",
+  "home.period.current_month": "Aktueller Monat",
+  "home.period.last_12_months": "Letzte 12 Monate",
+  "home.period.custom": "Benutzerdefiniert",
+  "home.period.from": "Von",
+  "home.period.to": "Bis"
 }

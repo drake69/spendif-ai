@@ -869,5 +869,13 @@
   "settings.db_info.address": "Adresse du serveur",
   "settings.db_info.size": "Taille",
   "settings.db_info.user": "Utilisateur",
-  "settings.db_info.file_missing": "Fichier introuvable — sera recréé au prochain lancement"
+  "settings.db_info.file_missing": "Fichier introuvable — sera recréé au prochain lancement",
+  "home.period.label": "Période",
+  "home.period.current_year": "Année en cours",
+  "home.period.current_quarter": "Trimestre en cours",
+  "home.period.current_month": "Mois en cours",
+  "home.period.last_12_months": "12 derniers mois",
+  "home.period.custom": "Personnalisé",
+  "home.period.from": "Du",
+  "home.period.to": "Au"
 }

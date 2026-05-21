@@ -869,5 +869,13 @@
   "settings.db_info.address": "Server address",
   "settings.db_info.size": "Size",
   "settings.db_info.user": "User",
-  "settings.db_info.file_missing": "File missing — will be recreated on next launch"
+  "settings.db_info.file_missing": "File missing — will be recreated on next launch",
+  "home.period.label": "Period",
+  "home.period.current_year": "Current year",
+  "home.period.current_quarter": "Current quarter",
+  "home.period.current_month": "Current month",
+  "home.period.last_12_months": "Last 12 months",
+  "home.period.custom": "Custom",
+  "home.period.from": "From",
+  "home.period.to": "To"
 }

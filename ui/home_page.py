@@ -37,7 +37,22 @@ _INCOME_TYPE = "income"
 _EXPENSE_TYPE = "expense"
 
 
-# ── Data loading ─────────────────────────────────────────────────────────────
+# ── Date range helpers ───────────────────────────────────────────────────────
+
+# Preset keys used both in session_state and in the i18n labels.
+_PRESET_CURRENT_YEAR  = "current_year"   # default
+_PRESET_CURRENT_QTR   = "current_quarter"
+_PRESET_CURRENT_MONTH = "current_month"
+_PRESET_LAST_12M      = "last_12_months"
+_PRESET_CUSTOM        = "custom"
+PRESETS_ORDERED = [
+    _PRESET_CURRENT_YEAR,
+    _PRESET_CURRENT_QTR,
+    _PRESET_CURRENT_MONTH,
+    _PRESET_LAST_12M,
+    _PRESET_CUSTOM,
+]
+
 
 def _twelve_months_ago(today: Optional[date] = None) -> date:
     """Return today minus 12 months. Uses replace(year=year-1) when possible,
@@ -50,11 +65,48 @@ def _twelve_months_ago(today: Optional[date] = None) -> date:
         return today - timedelta(days=_ROLLING_DAYS)
 
 
-def _load_transactions(engine, since: Optional[date] = None) -> pd.DataFrame:
-    """Load all transactions from `since` (default: 12 months ago) into a
-    DataFrame. Returns an empty DataFrame with the right schema if the
-    table is empty. Delegates the query to TransactionService to keep
-    `ui/` out of `db/` (coupling rule)."""
+def _resolve_period(
+    preset: str,
+    today: Optional[date] = None,
+    custom_from: Optional[date] = None,
+    custom_to: Optional[date] = None,
+) -> tuple[date, date]:
+    """Return the (date_from, date_to) tuple for the chosen preset.
+
+    For all built-in presets `date_to` is `today` (data in the future has
+    no meaning for a personal-finance dashboard). The "custom" preset is
+    the only one that honours `custom_to`.
+    """
+    today = today or date.today()
+    if preset == _PRESET_CURRENT_YEAR:
+        return date(today.year, 1, 1), today
+    if preset == _PRESET_CURRENT_QTR:
+        q_start_month = ((today.month - 1) // 3) * 3 + 1
+        return date(today.year, q_start_month, 1), today
+    if preset == _PRESET_CURRENT_MONTH:
+        return date(today.year, today.month, 1), today
+    if preset == _PRESET_LAST_12M:
+        return _twelve_months_ago(today), today
+    if preset == _PRESET_CUSTOM:
+        return (custom_from or _twelve_months_ago(today)), (custom_to or today)
+    # Unknown preset → safe default
+    return date(today.year, 1, 1), today
+
+
+# ── Data loading ─────────────────────────────────────────────────────────────
+
+def _load_transactions(
+    engine,
+    since: Optional[date] = None,
+    until: Optional[date] = None,
+) -> pd.DataFrame:
+    """Load transactions between `since` and `until` (inclusive on both
+    ends) into a DataFrame. Defaults preserve the previous behaviour:
+    `since` = 12 months ago, `until` = today.
+
+    Returns an empty DataFrame with the canonical schema when there are
+    no rows. Query is delegated to TransactionService to keep `ui/` out
+    of `db/` (coupling rule)."""
     since = since or _twelve_months_ago()
     rows = TransactionService(engine).get_recent_for_home(since.isoformat())
     if not rows:
@@ -64,6 +116,11 @@ def _load_transactions(engine, since: Optional[date] = None) -> pd.DataFrame:
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["amount"] = df["amount"].apply(lambda v: float(v) if v is not None else 0.0)
     df["reconciled"] = df["reconciled"].astype(bool)
+    # Apply the upper bound after the cheap service query (it only filters
+    # by `>= since`, by design — we'd rather post-filter in pandas than
+    # widen the service contract for a UI-specific need).
+    if until is not None:
+        df = df[df["date"] <= pd.Timestamp(until)]
     return df
 
 
@@ -266,16 +323,65 @@ def render_home_page(engine) -> None:
         return
 
     today = date.today()
-    since = _twelve_months_ago(today)
+
+    # ── Period selector ─────────────────────────────────────────────────────
+    # Default = current year. Choice is sticky across reruns via
+    # session_state. "Custom" reveals two date_input widgets.
+    _SESS_PRESET = "_home_period_preset"
+    _SESS_CUSTOM_FROM = "_home_period_custom_from"
+    _SESS_CUSTOM_TO = "_home_period_custom_to"
+    if _SESS_PRESET not in st.session_state:
+        st.session_state[_SESS_PRESET] = _PRESET_CURRENT_YEAR
+    if _SESS_CUSTOM_FROM not in st.session_state:
+        st.session_state[_SESS_CUSTOM_FROM] = _twelve_months_ago(today)
+    if _SESS_CUSTOM_TO not in st.session_state:
+        st.session_state[_SESS_CUSTOM_TO] = today
+
+    preset_labels = {p: _t(f"home.period.{p}") for p in PRESETS_ORDERED}
+    selected_label = st.radio(
+        _t("home.period.label"),
+        options=list(preset_labels.values()),
+        index=PRESETS_ORDERED.index(st.session_state[_SESS_PRESET]),
+        horizontal=True,
+        key="_home_period_radio",
+    )
+    # Reverse-lookup label → preset key.
+    preset = next(k for k, lbl in preset_labels.items() if lbl == selected_label)
+    st.session_state[_SESS_PRESET] = preset
+
+    if preset == _PRESET_CUSTOM:
+        col_from, col_to = st.columns(2)
+        with col_from:
+            st.session_state[_SESS_CUSTOM_FROM] = st.date_input(
+                _t("home.period.from"),
+                value=st.session_state[_SESS_CUSTOM_FROM],
+                max_value=today,
+                key="_home_period_from",
+            )
+        with col_to:
+            st.session_state[_SESS_CUSTOM_TO] = st.date_input(
+                _t("home.period.to"),
+                value=st.session_state[_SESS_CUSTOM_TO],
+                max_value=today,
+                key="_home_period_to",
+            )
+
+    since, until = _resolve_period(
+        preset,
+        today=today,
+        custom_from=st.session_state[_SESS_CUSTOM_FROM],
+        custom_to=st.session_state[_SESS_CUSTOM_TO],
+    )
+
     st.caption(_t("home.range_caption",
                   date_from=since.strftime("%d/%m/%Y"),
-                  date_to=today.strftime("%d/%m/%Y")))
+                  date_to=until.strftime("%d/%m/%Y")))
     st.divider()
 
-    df = _load_transactions(engine, since=since)
+    df = _load_transactions(engine, since=since, until=until)
 
     if df.empty:
-        # has_transactions said True but the rolling window is empty (all old).
+        # has_transactions said True but the selected period is empty.
         st.info(_t("home.charts.no_income"))
         return
 
