@@ -417,13 +417,29 @@ def _validate_llm_result(
         )
         return _make_fallback(amount, fallback_categories)
 
+    # An LLM that confidently picks the fallback bucket
+    # (e.g. "Altro / Spese non classificate") is semantically saying
+    # "I don't know" — coerce confidence to low and force to_review so
+    # those rows surface in the Review queue regardless of what the
+    # model claimed about its own certainty.
+    fallback_pair = (
+        (fallback_categories or {}).get(direction, _DEFAULT_FALLBACK_EXPENSE if direction == "expense" else _DEFAULT_FALLBACK_INCOME)
+    )
+    is_explicit_fallback = (category, subcategory) == fallback_pair
+    if is_explicit_fallback:
+        confidence_str = "low"
+        logger.info(
+            f"LLM picked the fallback pair {fallback_pair!r} for {direction} — "
+            "marking as to_review (semantic 'I don't know')"
+        )
+
     return CategorizationResult(
         category=category,
         subcategory=subcategory,
         confidence=Confidence(confidence_str) if confidence_str in ("high", "medium", "low") else Confidence.low,
         source=CategorySource.llm,
         rationale=rationale,
-        to_review=(confidence_str == "low"),
+        to_review=(confidence_str == "low" or is_explicit_fallback),
     )
 
 
