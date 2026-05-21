@@ -124,12 +124,12 @@ jobs:
         run: uv sync --frozen
 
       - name: Run coupling check — strict mode (ratchet baseline)
-        # Exit 1 se un file non nel baseline ha violazioni,
-        # o se un file nel baseline supera il suo max_violations.
-        # Il JSON viene salvato per i passi successivi.
+        # Exit 1 if a file not in the baseline has violations,
+        # or if a file in the baseline exceeds its max_violations.
+        # The JSON is saved for the following steps.
         run: uv run python tools/coupling_check.py --strict --json | tee coupling_report.json
-        # Il job fallisce se il comando esce con codice 1.
-        # continue-on-error: false  ← default, esplicito per chiarezza
+        # The job fails if the command exits with code 1.
+        # continue-on-error: false  ← default, explicit for clarity
 
       - name: Upload coupling report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -140,9 +140,9 @@ jobs:
           retention-days: 30
 
       - name: Post PR comment with coupling summary
-        # Posta un commento sulla PR con il riepilogo del report.
-        # Viene eseguito anche in caso di failure del check precedente
-        # (if: always()) così il contributore vede subito cosa ha rotto.
+        # Post a summary comment on the PR. Runs even when the previous
+        # check failed (if: always()) so the contributor sees what broke
+        # without having to dig into the workflow logs.
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         with:
@@ -160,8 +160,8 @@ jobs:
             const passed    = strict.strict_pass;
             const icon      = passed ? '✅' : '❌';
             const headline  = passed
-              ? '**Coupling check PASSED** — nessuna regressione di accoppiamento.'
-              : '**Coupling check FAILED** — nuove violazioni di accoppiamento rilevate.';
+              ? '**Coupling check PASSED** — no coupling regression.'
+              : '**Coupling check FAILED** — new coupling violations detected.';
 
             // Tabella per file
             const rows = report.files
@@ -173,18 +173,18 @@ jobs:
               })
               .join('\n');
 
-            // Dettaglio violazioni nei file falliti
+            // Details on the failing files
             let violationDetail = '';
             if (!passed && strict.failures && strict.failures.length > 0) {
-              violationDetail = '\n### Violazioni da correggere\n```\n'
+              violationDetail = '\n### Violations to fix\n```\n'
                 + strict.failures.join('\n')
                 + '\n```\n';
             }
 
-            // Avvisi baseline migliorato (opportunità di abbassare il baseline)
+            // Baseline improvement notices — opportunities to tighten the baseline
             let warningDetail = '';
             if (strict.warnings && strict.warnings.length > 0) {
-              warningDetail = '\n### ⚠️ Baseline migliorato — aggiorna coupling_baseline.json\n'
+              warningDetail = '\n### ⚠️ Baseline improved — update coupling_baseline.json\n'
                 + strict.warnings.map(w => `- ${w.trim()}`).join('\n') + '\n';
             }
 
@@ -193,16 +193,16 @@ jobs:
               '',
               headline,
               '',
-              `**Violazioni totali:** ${report.total_violations} | **File puliti:** ${report.files.filter(f => f.violations === 0).length}/${report.files.length} | **Coupling score:** ${(report.coupling_score * 100).toFixed(0)}%`,
+              `**Total violations:** ${report.total_violations} | **Clean files:** ${report.files.filter(f => f.violations === 0).length}/${report.files.length} | **Coupling score:** ${(report.coupling_score * 100).toFixed(0)}%`,
               '',
-              '| | File | Violazioni | Compliant | Score |',
+              '| | File | Violations | Compliant | Score |',
               '|---|---|---|---|---|',
               rows,
               violationDetail,
               warningDetail,
               '',
-              '> **Regola:** ogni file nuovo deve avere 0 violazioni.',
-              '> Le eccezioni note sono in [`tools/coupling_baseline.json`](tools/coupling_baseline.json).',
+              '> **Rule:** every new file must have 0 violations.',
+              '> Known exceptions are listed in [`tools/coupling_baseline.json`](tools/coupling_baseline.json).',
             ].join('\n');
 
             // Cerca un commento precedente di questo bot e aggiornalo
