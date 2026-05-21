@@ -41,7 +41,10 @@ def render_budget_page(engine):
 
     draft = st.session_state["budget_targets_draft"]
 
-    col_cat, col_pct, col_bar = st.columns([3, 2, 5])
+    # Header row — vertical_alignment="center" so the bold labels sit on
+    # the same baseline as the number input + progress bar in each data
+    # row below, no more `&nbsp;\n\n` padding hacks.
+    col_cat, col_pct, col_bar = st.columns([3, 2, 5], vertical_alignment="center")
     with col_cat:
         st.markdown(f"**{t('budget.col.category')}**")
     with col_pct:
@@ -51,11 +54,20 @@ def render_budget_page(engine):
 
     st.divider()
 
+    # Subtle row separator (one px line, low-opacity) so the eye can
+    # follow each category across the three columns without losing the
+    # row. Cheaper than full zebra-striping and survives dark + light
+    # themes via a translucent colour.
+    _ROW_SEPARATOR_HTML = (
+        '<hr style="margin: 0.25rem 0 0.5rem 0; border: none; '
+        'border-top: 1px solid rgba(128, 128, 128, 0.18);">'
+    )
+
     new_values: dict[str, float] = {}
-    for cat in cat_names:
-        col_cat, col_pct, col_bar = st.columns([3, 2, 5])
+    for idx, cat in enumerate(cat_names):
+        col_cat, col_pct, col_bar = st.columns([3, 2, 5], vertical_alignment="center")
         with col_cat:
-            st.markdown(f"&nbsp;\n\n{cat}")
+            st.markdown(cat)
         with col_pct:
             val = st.number_input(
                 f"% {cat}",
@@ -72,7 +84,11 @@ def render_budget_page(engine):
             if val > 0:
                 st.progress(min(val / 100.0, 1.0))
             else:
-                st.markdown(f"&nbsp;\n\n*{t('budget.no_target')}*")
+                st.markdown(f"*{t('budget.no_target')}*")
+        # No separator after the last row — the section divider below
+        # already closes the table.
+        if idx < len(cat_names) - 1:
+            st.markdown(_ROW_SEPARATOR_HTML, unsafe_allow_html=True)
 
     # ── Summary bar ───────────────────────────────────────────────────────────
     st.divider()
