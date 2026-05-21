@@ -74,8 +74,16 @@ st.markdown("""
 <style>
     .block-container { padding-top: 1rem !important; padding-bottom: 0.5rem !important; }
     header[data-testid="stHeader"] { height: 2rem !important; }
-    .stMainBlockContainer { padding-top: 0.5rem !important; }
-    h1, h2, h3 { margin-top: 0.3rem !important; margin-bottom: 0.3rem !important; }
+    /* Need a bit of breathing room at the top of the main container,
+       otherwise tall glyphs and emojis (e.g. the 📨 in "📨 Import")
+       get clipped because Streamlit ships overflow:hidden on the
+       block container. */
+    .stMainBlockContainer { padding-top: 1.25rem !important; }
+    h1, h2, h3 {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.4rem !important;
+        line-height: 1.35 !important;
+    }
     .stDataFrame, .stDataEditor { margin-top: 0.2rem !important; }
     div[data-testid="stExpander"] { margin-top: 0.3rem !important; }
 </style>
