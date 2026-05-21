@@ -196,3 +196,65 @@ def test_get_default_taxonomy_full_preview_includes_subcategories(svc):
         assert "category" in e0
         assert "subcategories" in e0
         assert isinstance(e0["subcategories"], list)
+
+
+# ── get_db_info ──────────────────────────────────────────────────────────────
+
+def test_get_db_info_sqlite_memory():
+    """In-memory SQLite reports kind='memory'."""
+    from sqlalchemy import create_engine
+    eng = create_engine("sqlite:///:memory:")
+    svc = SettingsService(eng)
+    info = svc.get_db_info()
+    assert info["dialect"] == "sqlite"
+    assert info["kind"] == "memory"
+    assert info["location"] == ":memory:"
+    assert info["display_label"].startswith("SQLite")
+
+
+def test_get_db_info_sqlite_file(tmp_path):
+    """File-based SQLite reports kind='file' with resolved path + size."""
+    from sqlalchemy import create_engine
+    db_path = tmp_path / "ledger.db"
+    eng = create_engine(f"sqlite:///{db_path}")
+    # Force file creation by running a no-op DDL
+    with eng.connect() as conn:
+        from sqlalchemy import text
+        conn.execute(text("CREATE TABLE _probe (id INTEGER)"))
+        conn.commit()
+    svc = SettingsService(eng)
+    info = svc.get_db_info()
+    assert info["kind"] == "file"
+    assert info["dialect"] == "sqlite"
+    assert info["location"].endswith("ledger.db")
+    assert info["file_exists"] is True
+    assert info["file_size_mb"] >= 0.0
+
+
+def test_get_db_info_sqlite_file_missing(tmp_path):
+    """Engine pointing to a non-existing file reports file_exists=False."""
+    from sqlalchemy import create_engine
+    db_path = tmp_path / "nope.db"
+    eng = create_engine(f"sqlite:///{db_path}")
+    svc = SettingsService(eng)
+    info = svc.get_db_info()
+    assert info["kind"] == "file"
+    assert info["file_exists"] is False
+    assert info["file_size_mb"] == 0.0
+
+
+def test_get_db_info_hosted_postgres_strips_password():
+    """A PostgreSQL URL reports kind='server' with host:port/db and user, no password."""
+    from sqlalchemy.engine.url import make_url
+    from unittest.mock import MagicMock
+    fake_engine = MagicMock()
+    fake_engine.url = make_url("postgresql://alice:supersecret@db.example.com:5432/finance")
+    svc = SettingsService(fake_engine)
+    info = svc.get_db_info()
+    assert info["kind"] == "server"
+    assert info["dialect"] == "postgresql"
+    assert info["location"] == "db.example.com:5432/finance"
+    assert info["user"] == "alice"
+    # Password must NOT leak anywhere
+    for v in info.values():
+        assert "supersecret" not in str(v)

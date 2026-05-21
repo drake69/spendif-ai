@@ -121,6 +121,62 @@ class SettingsService:
             s.commit()
             return count
 
+    # ── DB info ──────────────────────────────────────────────────────────────
+
+    def get_db_info(self) -> dict:
+        """Return a small dict describing where the app's data lives.
+
+        Used by the Settings page to give the user a clear answer to
+        "where is my data?" — file path for SQLite, host/port/db for a
+        hosted server. Passwords are never returned.
+
+        Keys returned:
+            dialect:       sqlalchemy dialect ('sqlite', 'postgresql', ...)
+            kind:          'file' | 'memory' | 'server'
+            display_label: human-friendly label, untranslated key suggestion
+            location:      file path (file) or 'host:port/db' (server)
+            file_size_mb:  float, only for kind='file' if the file exists
+            file_exists:   bool, only for kind='file'
+            user:          server user (no password), only for kind='server'
+        """
+        from pathlib import Path
+
+        url = self.engine.url
+        dialect = (url.get_dialect().name if hasattr(url, "get_dialect") else url.drivername or "").lower()
+        info: dict = {"dialect": dialect}
+
+        if dialect == "sqlite":
+            db_path = url.database or ""
+            if not db_path or db_path == ":memory:":
+                info.update({
+                    "kind": "memory",
+                    "display_label": "SQLite (in-memory)",
+                    "location": ":memory:",
+                })
+            else:
+                p = Path(db_path).expanduser().resolve()
+                info.update({
+                    "kind": "file",
+                    "display_label": "SQLite (local file)",
+                    "location": str(p),
+                    "file_exists": p.is_file(),
+                    "file_size_mb": (p.stat().st_size / (1024 * 1024)) if p.is_file() else 0.0,
+                })
+        else:
+            # Hosted DB (PostgreSQL, MySQL, MSSQL, …)
+            host = url.host or ""
+            port = url.port
+            db = url.database or ""
+            user = url.username or ""
+            loc = f"{host}{':' + str(port) if port else ''}/{db}" if host else db
+            info.update({
+                "kind": "server",
+                "display_label": f"{dialect.capitalize()} (hosted server)",
+                "location": loc,
+                "user": user,
+            })
+        return info
+
     # ── Bulk settings save ────────────────────────────────────────────────────
 
     def set_bulk(self, settings: dict[str, str]) -> None:

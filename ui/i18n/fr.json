@@ -854,5 +854,13 @@
   "home.charts.unknown": "Inconnu",
   "home.charts.uncategorised": "Sans catégorie",
   "home.charts.uncategorised_sub": "Sans sous-catégorie",
-  "home.charts.no_income": "Aucun revenu classé à afficher"
+  "home.charts.no_income": "Aucun revenu classé à afficher",
+  "settings.db_info.title": "🗄️ Base de données",
+  "settings.db_info.caption": "Où vivent vos données. Toutes les transactions, paramètres et règles sont stockés ici.",
+  "settings.db_info.type": "Type",
+  "settings.db_info.path": "Chemin du fichier",
+  "settings.db_info.address": "Adresse du serveur",
+  "settings.db_info.size": "Taille",
+  "settings.db_info.user": "Utilisateur",
+  "settings.db_info.file_missing": "Fichier introuvable — sera recréé au prochain lancement"
 }
