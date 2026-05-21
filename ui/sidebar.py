@@ -5,6 +5,7 @@ from ui.components.update_checker import render_update_warning
 
 # Navigation entries: (i18n_key_suffix, page_key)
 _NAV_KEYS = [
+    ("home",            "home"),
     ("import",          "import"),
     ("history",         "history"),
     ("ledger",          "ledger"),

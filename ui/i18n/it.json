@@ -837,5 +837,22 @@
   "onboarding.first_import.skip_help": "Atterra sulla Home, puoi importare in qualunque momento",
   "onboarding.first_import.step_label": "Primo import",
   "upload.empty_state.title": "📥 Nessuna transazione importata",
-  "upload.empty_state.caption": "Carica il tuo primo estratto bancario (CSV o XLSX) qui sotto per iniziare. Spendif.ai analizza le transazioni e le organizza nelle categorie che hai scelto durante il setup."
+  "upload.empty_state.caption": "Carica il tuo primo estratto bancario (CSV o XLSX) qui sotto per iniziare. Spendif.ai analizza le transazioni e le organizza nelle categorie che hai scelto durante il setup.",
+  "nav.home": "🏠 Home",
+  "nav.home.desc": "Riepilogo entrate, uscite e flussi degli ultimi 12 mesi",
+  "home.title": "🏠 Spendif.ai — Home",
+  "home.subtitle": "Riepilogo entrate, uscite e residuo",
+  "home.range_caption": "Ultimi 12 mesi — dal {date_from} al {date_to}",
+  "home.empty_state.message": "Stiamo aspettando i tuoi dati. Carica i primi estratti conto dalla pagina Import.",
+  "home.empty_state.cta": "→ Vai a Import",
+  "home.charts.income_title": "Entrate per mese",
+  "home.charts.sankey_title": "Flusso entrate → uscite",
+  "home.charts.month": "Mese",
+  "home.charts.amount": "Importo (€)",
+  "home.charts.category": "Categoria",
+  "home.charts.income_total": "Entrate totali",
+  "home.charts.unknown": "Sconosciuto",
+  "home.charts.uncategorised": "Senza categoria",
+  "home.charts.uncategorised_sub": "Senza sottocategoria",
+  "home.charts.no_income": "Nessuna entrata classificata da mostrare"
 }

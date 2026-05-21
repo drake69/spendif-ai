@@ -36,6 +36,26 @@ class TransactionService:
         with self._session() as s:
             return s.query(Transaction.id).limit(1).first() is not None
 
+    def get_recent_for_home(self, since_iso: str) -> list[tuple]:
+        """Return rows since *since_iso* with only the columns the Home
+        dashboard needs. Tuple shape: (date, amount, tx_type, category,
+        subcategory, reconciled). Keeps the UI off of `db/` imports per
+        the coupling rule — the UI converts to DataFrame.
+        """
+        with self._session() as s:
+            return (
+                s.query(
+                    Transaction.date,
+                    Transaction.amount,
+                    Transaction.tx_type,
+                    Transaction.category,
+                    Transaction.subcategory,
+                    Transaction.reconciled,
+                )
+                .filter(Transaction.date >= since_iso)
+                .all()
+            )
+
     def update_category(self, tx_id: str, category: str, subcategory: str) -> bool:
         with self._session() as s:
             result = repository.update_transaction_category(s, tx_id, category, subcategory)

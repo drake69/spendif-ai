@@ -837,5 +837,22 @@
   "onboarding.first_import.skip_help": "Lands on the Home, you can import any time",
   "onboarding.first_import.step_label": "First import",
   "upload.empty_state.title": "📥 No transactions yet",
-  "upload.empty_state.caption": "Upload your first bank statement (CSV or XLSX) below to get started. Spendif.ai will parse the transactions and sort them into the categories you picked during setup."
+  "upload.empty_state.caption": "Upload your first bank statement (CSV or XLSX) below to get started. Spendif.ai will parse the transactions and sort them into the categories you picked during setup.",
+  "nav.home": "🏠 Home",
+  "nav.home.desc": "Income, expenses and flow overview for the last 12 months",
+  "home.title": "🏠 Spendif.ai — Home",
+  "home.subtitle": "Income, expenses and remainder overview",
+  "home.range_caption": "Last 12 months — from {date_from} to {date_to}",
+  "home.empty_state.message": "Waiting for your data. Upload your first statements from the Import page.",
+  "home.empty_state.cta": "→ Go to Import",
+  "home.charts.income_title": "Income by month",
+  "home.charts.sankey_title": "Income → expense flow",
+  "home.charts.month": "Month",
+  "home.charts.amount": "Amount (€)",
+  "home.charts.category": "Category",
+  "home.charts.income_total": "Total income",
+  "home.charts.unknown": "Unknown",
+  "home.charts.uncategorised": "Uncategorised",
+  "home.charts.uncategorised_sub": "Uncategorised",
+  "home.charts.no_income": "No classified income to display"
 }

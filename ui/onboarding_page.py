@@ -280,18 +280,22 @@ def _step0_language(cfg_svc: SettingsService, lang_options: list[tuple[str, str]
     # so the default onboarding stays a single visible question.
     _country_labels = _sorted_country_labels()
     _fallback_label = _country_label("IT")
-    _cur_country_label = st.session_state.get("_ob_country_select", _fallback_label)
-    if _cur_country_label not in _country_labels:
-        # Stale label from a previous language → reset to auto-suggestion.
-        _cur_country_label = _country_label(st.session_state[_K_COUNTRY])
-        st.session_state["_ob_country_select"] = _cur_country_label
+    # Source of truth for the selectbox: st.session_state["_ob_country_select"].
+    # We pre-seed it here when it's missing or stale (e.g. coming from a
+    # different language, so the cached label is no longer in the options
+    # list). Passing ONLY `key=` to st.selectbox below keeps Streamlit from
+    # warning "default value AND session_state value set at the same time".
+    _stored = st.session_state.get("_ob_country_select")
+    if _stored not in _country_labels:
+        st.session_state["_ob_country_select"] = _country_label(
+            st.session_state.get(_K_COUNTRY, "IT")
+        )
     _auto_country = _country_label(st.session_state[_K_COUNTRY])
     with st.expander(t("onboarding.step0.country_expander", country=_auto_country), expanded=False):
         st.caption(t("onboarding.step0.country_caption"))
         selected_country_label = st.selectbox(
             t("onboarding.step0.country"),
             _country_labels,
-            index=_country_labels.index(_cur_country_label),
             key="_ob_country_select",
             label_visibility="collapsed",
         )
@@ -559,7 +563,10 @@ def _step3_taxonomy(cfg_svc: SettingsService, lang: str) -> None:
                             label_visibility="collapsed",
                         )
                         sub["name"] = sc2.text_input(
-                            "",
+                            # Non-empty label hidden via label_visibility —
+                            # Streamlit warns ("disallowed in the future")
+                            # if the label is an empty string.
+                            t("taxonomy.rename_subcategory"),
                             value=sub["name"],
                             key=f"{key_prefix}_subname_{idx}_{s_idx}",
                             label_visibility="collapsed",
@@ -824,9 +831,10 @@ def _step6_first_import(cfg_svc: SettingsService, lang: str) -> None:
             key="_ob_fi_skip",
             help=t("onboarding.first_import.skip_help"),
         ):
-            # Home page does not exist yet — land on Import for now.
-            # Switch to "home" when the Home page is implemented.
-            _exit_onboarding(target_page="import")
+            # Home page exists now; "skip" lands the user there. Its empty
+            # state shows a CTA back to Import — coherent with the routing
+            # already managed by app.py's has_transactions() guard.
+            _exit_onboarding(target_page="home")
 
 
 def _persist_choices(
