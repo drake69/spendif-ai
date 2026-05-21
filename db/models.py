@@ -18,6 +18,7 @@ Thirteen tables:
 from __future__ import annotations
 
 import hashlib
+import os
 import pathlib
 from datetime import datetime, timezone
 
@@ -37,7 +38,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship
 
-DB_URL = "sqlite:///ledger.db"
+# The DB URL is read once at import time from the SPENDIFAI_DB env var so
+# that every call site that imports `get_engine()` without arguments lands
+# on the same database the app initialized. Without this, helpers like
+# `_log_usage_to_db` would silently target `./ledger.db` in the cwd while
+# the app uses `~/.spendifai/db.sqlite` set via SPENDIFAI_DB by the bundle
+# launcher, producing "no such table" errors against a phantom file.
+DB_URL = os.environ.get("SPENDIFAI_DB", "sqlite:///ledger.db")
 
 
 class Base(DeclarativeBase):
