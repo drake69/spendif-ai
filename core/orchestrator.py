@@ -677,7 +677,7 @@ def process_file(
     taxonomy: TaxonomyConfig,
     user_rules: list[CategoryRule],
     known_schema: Optional[DocumentSchema] = None,
-    progress_callback=None,  # Callable[[float], None] — 0.0..1.0 within this file
+    progress_callback=None,  # Callable[[float, str|None], None] — 0..1 + phase key (header_detection|classifying|footer_detection|extracting|cleaning|categorizing). Backward-compat: callables accepting only (float,) are still supported.
     existing_tx_ids_checker=None,  # Callable[[list[str]], set[str]] — returns already-imported tx ids
     account_label_override: Optional[str] = None,  # user-selected account name; overrides LLM-assigned label
     skip_rows_override: Optional[int] = None,  # user-confirmed skip_rows from UI; takes precedence over schema
@@ -702,9 +702,17 @@ def process_file(
     Returns:
         ImportResult.
     """
-    def _progress(p: float):
+    def _progress(p: float, phase: str | None = None):
+        # phase is one of: header_detection, classifying, footer_detection,
+        # extracting, cleaning, categorizing — the UI maps it to a localized
+        # label via the `upload.phase.<key>` i18n entries.
         if progress_callback:
-            progress_callback(max(0.0, min(1.0, p)))
+            clamped = max(0.0, min(1.0, p))
+            try:
+                progress_callback(clamped, phase)
+            except TypeError:
+                # Legacy callbacks accepting only (float,) — keep working.
+                progress_callback(clamped)
 
     batch_sha256 = compute_file_hash(raw_bytes)
     logger.info(f"process_file: loading {filename} ({len(raw_bytes)} bytes)")
@@ -714,8 +722,8 @@ def process_file(
     if cat_backend is not backend:
         logger.info(f"process_file: using separate categorizer backend ({config.cat_llm_backend})")
 
-    # Load raw data
-    _progress(0.0)
+    # Load raw data — load_raw_dataframe detects skip_rows + header internally
+    _progress(0.0, "header_detection")
     # skip_rows_override (from UI) takes precedence; fall back to cached schema value
     skip_override = (
         skip_rows_override
@@ -733,7 +741,7 @@ def process_file(
         f"process_file: loaded {filename} | rows={len(df_raw)} "
         f"ncols={len(df_raw.columns)} | known_schema={'yes' if known_schema else 'no'}"
     )
-    _progress(0.05)
+    _progress(0.05, "classifying")
 
     # Test mode: truncate to first N rows for quick pipeline verification
     if config.test_mode and len(df_raw) > config.test_mode_rows:
@@ -824,7 +832,7 @@ def process_file(
             account_type=_account_type,
             classifier_mode=config.classifier_mode,
         )
-        _progress(0.25)
+        _progress(0.25, "classifying")
 
         # Confidence-based auto-import decision (I-04: force_schema_import bypasses review)
         _score = doc_schema.confidence_score if doc_schema else 0.0
@@ -861,7 +869,7 @@ def process_file(
                 available_columns=list(df_raw.columns),
             )
     else:
-        _progress(0.10)
+        _progress(0.10, "classifying")
 
     # I-10: propagate border detection result to schema for persistence
     if _preprocess_info.border_detected and not getattr(doc_schema, 'has_borders', False):
@@ -883,6 +891,7 @@ def process_file(
         doc_schema.header_sha256 = compute_header_sha256(raw_bytes, filename)
 
     # ── 3-Phase Footer Stripping (post-schema) ─────────────────────────────
+    _progress(0.27, "footer_detection")
     _total_footer_stripped = 0
 
     # Phase 1: Structural filter (always runs — zero cost, no LLM)
@@ -972,7 +981,7 @@ def process_file(
     # Apply schema → canonical transactions
     _total_file_rows = len(df_raw)
     transactions, _norm_skipped, _merge_count = _normalize_df_with_schema(df_raw, doc_schema, filename)
-    _progress(0.35)
+    _progress(0.35, "extracting")
 
     # ── Schema auto-invalidation ─────────────────────────────────────────────
     # If a cached schema (Flow 1) produces a catastrophically low parse rate,
@@ -1118,7 +1127,7 @@ def process_file(
                 skipped_rows=_norm_skipped,
                 merged_count=_merge_count,
             )
-    _progress(0.38)
+    _progress(0.38, "cleaning")
 
     # ── Description cleaning: extract counterpart name (pre-categorization) ──
     # Sends descriptions to LLM to strip payment-method boilerplate and keep
@@ -1205,7 +1214,7 @@ def process_file(
 
     def _cat_cb(frac: float):
         # Map categorization progress (0..1) → file progress (0.40..1.0)
-        _progress(0.40 + 0.60 * frac)
+        _progress(0.40 + 0.60 * frac, "categorizing")
 
     cat_results = categorize_batch(
         transactions=to_categorize,

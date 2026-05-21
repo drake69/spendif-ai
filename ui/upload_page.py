@@ -570,18 +570,33 @@ def render_upload_page(engine):
 
             def _make_cb(start: float, end: float, fname: str,
                          fidx: int, ftot: int, jid: int, _last: list):
-                def _cb(p: float):
+                def _cb(p: float, phase: str | None = None):
                     pct = start + (end - start) * p
                     _progress_bar.progress(min(pct, 1.0))
                     _status_text.text(f"File {fidx + 1}/{ftot} — {fname}")
-                    _counter_text.caption(t_fn("upload.file_progress", pct=int(p * 100)))
+                    if phase:
+                        _counter_text.caption(
+                            t_fn("upload.file_progress_with_phase",
+                                 phase=t_fn(f"upload.phase.{phase}"),
+                                 pct=int(p * 100))
+                        )
+                    else:
+                        _counter_text.caption(
+                            t_fn("upload.file_progress", pct=int(p * 100))
+                        )
                     now = time.time()
                     if now - _last[0] >= _DB_WRITE_INTERVAL:
                         _last[0] = now
+                        phase_suffix = (
+                            f" — {t_fn(f'upload.phase.{phase}')}" if phase else ""
+                        )
                         import_svc.update_job(
                             jid,
                             progress=round(pct, 4),
-                            status_message=f"File {fidx + 1}/{ftot} — {fname} ({int(p * 100)}%)",
+                            status_message=(
+                                f"File {fidx + 1}/{ftot} — {fname}"
+                                f"{phase_suffix} ({int(p * 100)}%)"
+                            ),
                         )
                 return _cb
 
