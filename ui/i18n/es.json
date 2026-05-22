@@ -978,5 +978,8 @@
   "llm_models.stats.col.std_s": "Desv. típ.",
   "llm_models.stats.col.std_s_help": "Desviación típica de la latencia para este modelo/fase. Mide cuánto se desvían las llamadas individuales de la media — alta = comportamiento imprevisible.",
   "llm_models.stats.col.cv_pct": "CV %",
-  "llm_models.stats.col.cv_pct_help": "Coeficiente de variación = desv.típ. / media × 100. Medida de estabilidad sin unidades: <20 % muy estable, 20-50 % normal, >50 % muy variable."
+  "llm_models.stats.col.cv_pct_help": "Coeficiente de variación = desv.típ. / media × 100. Medida de estabilidad sin unidades: <20 % muy estable, 20-50 % normal, >50 % muy variable.",
+  "llm_models.stats.col.s_per_tx": "s/tx",
+  "llm_models.stats.col.s_per_tx_help": "Tiempo medio por transacción = duración media de la llamada ÷ batch_size. Vacío para fases single-shot (classifier, footer). Útil para estimar el tiempo total de un import.",
+  "llm_models.stats.col.mean_s_help": "Latencia media de una sola llamada LLM (puede contener N transacciones en el lote). Para el tiempo por transacción ver la columna s/tx."
 }

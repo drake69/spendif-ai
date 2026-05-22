@@ -978,5 +978,8 @@
   "llm_models.stats.col.std_s": "Écart-type",
   "llm_models.stats.col.std_s_help": "Écart-type de la latence pour ce modèle/phase. Mesure la dispersion des appels autour de la moyenne — élevé = comportement imprévisible.",
   "llm_models.stats.col.cv_pct": "CV %",
-  "llm_models.stats.col.cv_pct_help": "Coefficient de variation = écart-type / moyenne × 100. Mesure de stabilité sans unité : <20 % très stable, 20-50 % normal, >50 % très variable."
+  "llm_models.stats.col.cv_pct_help": "Coefficient de variation = écart-type / moyenne × 100. Mesure de stabilité sans unité : <20 % très stable, 20-50 % normal, >50 % très variable.",
+  "llm_models.stats.col.s_per_tx": "s/tx",
+  "llm_models.stats.col.s_per_tx_help": "Temps moyen par transaction = durée moyenne de l'appel ÷ batch_size. Vide pour les phases single-shot (classifier, footer). Utile pour estimer le temps total d'un import.",
+  "llm_models.stats.col.mean_s_help": "Latence moyenne d'un seul appel LLM (un appel peut contenir N transactions dans un lot). Pour le temps par transaction voir la colonne s/tx."
 }

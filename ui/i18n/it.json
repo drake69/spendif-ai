@@ -978,5 +978,8 @@
   "llm_models.stats.col.std_s": "Dev. std.",
   "llm_models.stats.col.std_s_help": "Deviazione standard della latenza nello stesso modello/fase. Misura quanto i singoli call si discostano dalla media — alta = comportamento imprevedibile.",
   "llm_models.stats.col.cv_pct": "CV %",
-  "llm_models.stats.col.cv_pct_help": "Coefficiente di variazione = dev.std / media × 100. Misura adimensionale della stabilità: <20% molto stabile, 20-50% normale, >50% molto variabile."
+  "llm_models.stats.col.cv_pct_help": "Coefficiente di variazione = dev.std / media × 100. Misura adimensionale della stabilità: <20% molto stabile, 20-50% normale, >50% molto variabile.",
+  "llm_models.stats.col.s_per_tx": "s/tx",
+  "llm_models.stats.col.s_per_tx_help": "Tempo medio per singola transazione = durata media della call ÷ batch_size. Vuoto per le fasi single-shot (classifier, footer) dove 1 call ≠ N transazioni. Utile per stimare il tempo totale di un import.",
+  "llm_models.stats.col.mean_s_help": "Latenza media per una singola chiamata LLM (può contenere N transazioni nel batch). Per il tempo per tx vedi la colonna s/tx."
 }

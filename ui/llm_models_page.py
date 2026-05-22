@@ -630,6 +630,14 @@ def _render_stats_7d(engine) -> None:
                     "COUNT(*) AS n_calls, "
                     "AVG(duration_ms) AS mean_ms, "
                     "AVG(duration_ms * duration_ms) - AVG(duration_ms) * AVG(duration_ms) AS var_ms, "
+                    # Per-transaction latency: divide each call's duration by
+                    # its batch_size, then average. NULLIF guards against
+                    # batch_size=0 and the single-shot callers (classifier,
+                    # normalizer/footer) that pass batch_size=NULL — those
+                    # cells will come back as NULL, surfaced as NaN in pandas
+                    # and rendered blank by Streamlit (semantic: "1 call ≠
+                    # N transactions, the per-tx column isn't meaningful").
+                    "AVG(CAST(duration_ms AS REAL) / NULLIF(batch_size, 0)) AS ms_per_tx, "
                     "SUM(total_tokens) AS tokens "
                     "FROM llm_usage_log "
                     "WHERE timestamp >= :since "
@@ -648,29 +656,35 @@ def _render_stats_7d(engine) -> None:
         st.info(t("llm_models.stats.empty"))
         return
 
-    df = pd.DataFrame(rows, columns=["caller", "model", "n_calls", "mean_ms", "var_ms", "tokens"])
+    df = pd.DataFrame(rows, columns=["caller", "model", "n_calls", "mean_ms", "var_ms", "ms_per_tx", "tokens"])
     df["mean_s"]   = (df["mean_ms"].astype(float) / 1000.0).round(2)
     # var_ms can be a tiny negative from FP cancellation when all samples
     # are identical — clamp at 0 before sqrt to avoid NaN.
     _var = df["var_ms"].astype(float).clip(lower=0.0)
     df["std_s"]    = ((_var ** 0.5) / 1000.0).round(2)
     df["cv_pct"]   = (df["std_s"] / df["mean_s"].replace(0, pd.NA) * 100).round(1)
+    # ms_per_tx is NULL for callers without a batch_size (classifier, footer).
+    # Convert to seconds; NaN stays NaN and Streamlit renders the cell blank.
+    df["s_per_tx"] = pd.to_numeric(df["ms_per_tx"], errors="coerce").div(1000).round(2)
     df["n_calls"]  = df["n_calls"].astype(int)
     df["tokens"]   = df["tokens"].fillna(0).astype(int)
     st.dataframe(
-        df[["caller", "model", "n_calls", "mean_s", "std_s", "cv_pct", "tokens"]],
+        df[["caller", "model", "n_calls", "mean_s", "s_per_tx", "std_s", "cv_pct", "tokens"]],
         hide_index=True,
         width="stretch",
         column_config={
-            "caller":  st.column_config.TextColumn(t("llm_models.stats.col.caller")),
-            "model":   st.column_config.TextColumn(t("llm_models.stats.col.model")),
-            "n_calls": st.column_config.NumberColumn(t("llm_models.stats.col.n_calls"), format="%d"),
-            "mean_s":  st.column_config.NumberColumn(t("llm_models.stats.col.mean_s"),  format="%.2f s"),
-            "std_s":   st.column_config.NumberColumn(t("llm_models.stats.col.std_s"),   format="%.2f s",
-                                                     help=t("llm_models.stats.col.std_s_help")),
-            "cv_pct":  st.column_config.NumberColumn(t("llm_models.stats.col.cv_pct"),  format="%.1f %%",
-                                                     help=t("llm_models.stats.col.cv_pct_help")),
-            "tokens":  st.column_config.NumberColumn(t("llm_models.stats.col.tokens"),  format="%d"),
+            "caller":   st.column_config.TextColumn(t("llm_models.stats.col.caller")),
+            "model":    st.column_config.TextColumn(t("llm_models.stats.col.model")),
+            "n_calls":  st.column_config.NumberColumn(t("llm_models.stats.col.n_calls"), format="%d"),
+            "mean_s":   st.column_config.NumberColumn(t("llm_models.stats.col.mean_s"),   format="%.2f s",
+                                                      help=t("llm_models.stats.col.mean_s_help")),
+            "s_per_tx": st.column_config.NumberColumn(t("llm_models.stats.col.s_per_tx"), format="%.2f s",
+                                                      help=t("llm_models.stats.col.s_per_tx_help")),
+            "std_s":    st.column_config.NumberColumn(t("llm_models.stats.col.std_s"),    format="%.2f s",
+                                                      help=t("llm_models.stats.col.std_s_help")),
+            "cv_pct":   st.column_config.NumberColumn(t("llm_models.stats.col.cv_pct"),   format="%.1f %%",
+                                                      help=t("llm_models.stats.col.cv_pct_help")),
+            "tokens":   st.column_config.NumberColumn(t("llm_models.stats.col.tokens"),   format="%d"),
         },
     )
 
