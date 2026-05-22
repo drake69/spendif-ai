@@ -723,7 +723,7 @@ DEFAULT_GGUF_MODELS = {
     },
     "Qwen_Qwen3.5-9B-Q3_K_M": {
         "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/main/Qwen_Qwen3.5-9B-Q3_K_M.gguf",
-        "size_gb": 4.6,
+        "size_gb": 5.0,
         "description": "Qwen 3.5 9B Q3 — categorizer leader nei benchmark (42.3% exact, n=125)",
     },
     "Qwen_Qwen3.5-9B-Q4_K_M": {
