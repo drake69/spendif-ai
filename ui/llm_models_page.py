@@ -12,6 +12,9 @@ follow-ups.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
+import pandas as pd
 import streamlit as st
 
 from services.settings_service import SettingsService
@@ -124,6 +127,58 @@ def _render_account_credentials(svc: SettingsService, settings: dict) -> None:
         logger.info("llm_models_page: account credentials saved")
 
 
+def _run_phase_test(phase: str, new_vals: dict, settings: dict) -> None:
+    """Send a tiny test prompt through the phase's backend, show outcome inline.
+
+    Reuses `services.llm_service.test_llm_backend`. Resolves account-level
+    credentials (api_key, base_url) from the current settings dict because
+    they aren't duplicated per phase by design.
+    """
+    from services.llm_service import test_llm_backend
+
+    backend = new_vals.get(f"{phase}_llm_backend", "")
+    if not backend:
+        st.warning(t("llm_models.phase.test_no_backend"))
+        return
+
+    kwargs: dict = {"backend": backend}
+    if backend == "local_llama_cpp":
+        kwargs["model_path"] = new_vals.get(f"{phase}_llama_cpp_model_path", "") or settings.get("llama_cpp_model_path", "")
+        try:
+            kwargs["n_gpu_layers"] = int(new_vals.get(f"{phase}_llama_cpp_n_gpu_layers", "-1") or "-1")
+            kwargs["n_ctx"] = int(new_vals.get(f"{phase}_llama_cpp_n_ctx", "0") or "0")
+        except (TypeError, ValueError):
+            pass
+    elif backend == "local_ollama":
+        kwargs["base_url"] = settings.get("ollama_base_url", "http://localhost:11434")
+        kwargs["model"] = new_vals.get(f"{phase}_ollama_model", "") or settings.get("ollama_model", "")
+    elif backend == "openai":
+        kwargs["api_key"] = settings.get("openai_api_key", "")
+        kwargs["model"] = new_vals.get(f"{phase}_openai_model", "") or settings.get("openai_model", "")
+    elif backend == "claude":
+        kwargs["api_key"] = settings.get("anthropic_api_key", "")
+        kwargs["model"] = new_vals.get(f"{phase}_anthropic_model", "") or settings.get("anthropic_model", "")
+    elif backend == "openai_compatible":
+        kwargs["base_url"] = settings.get("compat_base_url", "")
+        kwargs["api_key"] = settings.get("compat_api_key", "")
+        kwargs["model"] = new_vals.get(f"{phase}_compat_model", "") or settings.get("compat_model", "")
+    elif backend in ("vllm", "vllm_offline"):
+        kwargs["base_url"] = settings.get("vllm_base_url", "")
+        kwargs["model"] = settings.get("vllm_model", "")
+        kwargs["api_key"] = settings.get("vllm_api_key", "") or "none"
+
+    with st.spinner(t("llm_models.phase.test_running")):
+        import time as _time
+        _t0 = _time.monotonic()
+        ok, msg = test_llm_backend(**kwargs)
+        elapsed = _time.monotonic() - _t0
+    if ok:
+        st.success(t("llm_models.phase.test_ok", elapsed=f"{elapsed:.1f}"))
+    else:
+        st.error(t("llm_models.phase.test_fail", error=msg[:200]))
+    logger.info(f"llm_models_page: phase {phase} test backend={backend} ok={ok} elapsed={elapsed:.2f}s")
+
+
 def _render_phase_card(svc: SettingsService, settings: dict, phase: str, icon: str) -> None:
     """Render one configuration card for a single pipeline phase."""
     st.markdown(f"#### {icon} {t(f'llm_models.phase.{phase}')}")
@@ -215,15 +270,28 @@ def _render_phase_card(svc: SettingsService, settings: dict, phase: str, icon: s
         if sel in ("openai", "claude", "openai_compatible"):
             st.warning(t("llm_models.phase.hosted_privacy_warning"))
 
-    if st.button(
-        t("llm_models.phase.save"),
-        key=f"_llmpage_{phase}_save",
-        type="primary",
-    ):
-        svc.set_bulk(new_vals)
-        st.success(t("llm_models.phase.saved"))
-        logger.info(f"llm_models_page: phase {phase} saved — backend={new_vals.get(f'{phase}_llm_backend','')!r}")
-        st.rerun()
+    col_save, col_test = st.columns(2)
+    with col_save:
+        if st.button(
+            t("llm_models.phase.save"),
+            key=f"_llmpage_{phase}_save",
+            type="primary",
+            width="stretch",
+        ):
+            svc.set_bulk(new_vals)
+            st.success(t("llm_models.phase.saved"))
+            logger.info(f"llm_models_page: phase {phase} saved — backend={new_vals.get(f'{phase}_llm_backend','')!r}")
+            st.rerun()
+    with col_test:
+        test_disabled = use_main  # no override = nothing to test for this phase
+        if st.button(
+            t("llm_models.phase.test"),
+            key=f"_llmpage_{phase}_test",
+            disabled=test_disabled,
+            help=t("llm_models.phase.test_disabled_help") if test_disabled else t("llm_models.phase.test_help"),
+            width="stretch",
+        ):
+            _run_phase_test(phase, new_vals, settings)
 
 
 def render_llm_models_page(engine) -> None:
@@ -248,4 +316,74 @@ def render_llm_models_page(engine) -> None:
 
     st.divider()
     st.subheader(t("llm_models.operations.title"))
-    st.caption(t("llm_models.operations.caption_stub"))
+    _render_stats_7d(engine)
+    st.divider()
+    _render_calibrate_stub()
+    _render_download_stub()
+
+
+def _render_stats_7d(engine) -> None:
+    """Aggregate llm_usage_log over the last 7 days, group by caller × model."""
+    from sqlalchemy import text as _sql
+
+    st.markdown(f"**{t('llm_models.stats.title')}**")
+    st.caption(t("llm_models.stats.caption"))
+
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                _sql(
+                    "SELECT caller, model_id, "
+                    "COUNT(*) AS n_calls, "
+                    "AVG(duration_ms) AS mean_ms, "
+                    "SUM(total_tokens) AS tokens "
+                    "FROM llm_usage_log "
+                    "WHERE timestamp >= :since "
+                    "GROUP BY caller, model_id "
+                    "ORDER BY n_calls DESC"
+                ),
+                {"since": since.isoformat()},
+            ).fetchall()
+    except Exception as exc:
+        # Most likely cause: table missing on a freshly created DB.
+        st.info(t("llm_models.stats.unavailable"))
+        logger.debug(f"llm_models_page: stats query failed: {exc}")
+        return
+
+    if not rows:
+        st.info(t("llm_models.stats.empty"))
+        return
+
+    df = pd.DataFrame(rows, columns=["caller", "model", "n_calls", "mean_ms", "tokens"])
+    df["mean_s"]   = (df["mean_ms"].astype(float) / 1000.0).round(2)
+    df["n_calls"]  = df["n_calls"].astype(int)
+    df["tokens"]   = df["tokens"].fillna(0).astype(int)
+    st.dataframe(
+        df[["caller", "model", "n_calls", "mean_s", "tokens"]],
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "caller":  st.column_config.TextColumn(t("llm_models.stats.col.caller")),
+            "model":   st.column_config.TextColumn(t("llm_models.stats.col.model")),
+            "n_calls": st.column_config.NumberColumn(t("llm_models.stats.col.n_calls"), format="%d"),
+            "mean_s":  st.column_config.NumberColumn(t("llm_models.stats.col.mean_s"), format="%.2f s"),
+            "tokens":  st.column_config.NumberColumn(t("llm_models.stats.col.tokens"), format="%d"),
+        },
+    )
+
+
+def _render_calibrate_stub() -> None:
+    st.markdown(f"**{t('llm_models.calibrate.title')}**")
+    st.caption(t("llm_models.calibrate.caption"))
+    st.button(
+        t("llm_models.calibrate.btn"),
+        key="_llmpage_calibrate",
+        disabled=True,
+        help=t("llm_models.calibrate.coming_soon"),
+    )
+
+
+def _render_download_stub() -> None:
+    st.markdown(f"**{t('llm_models.download.title')}**")
+    st.caption(t("llm_models.download.caption_stub"))
