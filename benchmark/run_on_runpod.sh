@@ -96,30 +96,35 @@ fi
 echo "[3/5] Creating RunPod pod ($GPU community-cloud)…"
 POD_NAME="spendify-bench-$(date +%s)"
 # runpodctl notes:
-#  * `--communityCloud` is the right flag for the cheap community cloud
-#    (was incorrectly `--secureCloud false` which isn't a thing — that
-#    flag is a presence-only bool that opts INTO secure cloud).
-#  * JSON output is the default (`-o, --output string … (default "json")`)
-#    so no `--json` flag needed; an explicit `--output json` would also
-#    work but it's a global flag and must appear BEFORE the subcommand.
-POD_ID="$(runpodctl create pod \
+#  * The new subcommand layout is `runpodctl pod create` (the legacy
+#    `runpodctl create pod` is deprecated and warns at every call).
+#  * `--communityCloud` opts into the cheap community cloud (~$0.34/h
+#    for an RTX 4090); the alternative is `--secureCloud` (presence-only).
+#  * JSON output is the default — no `--json` flag needed.
+#  * Disk knobs trimmed: containerDisk 15 GB is more than enough for
+#    the image (~3 GB), the venv (~1 GB), and a single 5-GB model; the
+#    persistent volume drops to 1 GB (default) because the smoke test
+#    doesn't reuse models across pods. If the community cloud is at
+#    capacity for the requested GPU, RunPod returns "This machine does
+#    not have the resources to deploy your pod" — try a different GPU
+#    via --gpu or wait a few minutes.
+POD_ID="$(runpodctl pod create \
     --name        "$POD_NAME" \
     --imageName   "$IMAGE" \
     --gpuType     "$GPU" \
     --gpuCount    1 \
-    --containerDiskSize 20 \
-    --volumeSize  20 \
+    --containerDiskSize 15 \
     --communityCloud \
     --args "--models $MODELS --runs $RUNS --files $FILES" \
     | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["id"])')"
 
 echo "[3/5]   pod id: $POD_ID"
-trap 'echo "[cleanup] stopping pod $POD_ID …"; runpodctl stop pod "$POD_ID" 2>/dev/null || true; runpodctl remove pod "$POD_ID" 2>/dev/null || true' EXIT INT TERM
+trap 'echo "[cleanup] stopping pod $POD_ID …"; runpodctl pod stop "$POD_ID" 2>/dev/null || true; runpodctl pod remove "$POD_ID" 2>/dev/null || true' EXIT INT TERM
 
 # ── 4. Wait for completion ───────────────────────────────────────────────────
 echo "[4/5] Waiting for pod to reach EXITED / SUCCEEDED …"
 while true; do
-    STATUS="$(runpodctl get pod "$POD_ID" | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["desiredStatus"])' 2>/dev/null || echo UNKNOWN)"
+    STATUS="$(runpodctl pod get "$POD_ID" | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["desiredStatus"])' 2>/dev/null || echo UNKNOWN)"
     case "$STATUS" in
         EXITED|SUCCEEDED) echo "[4/5]   pod completed"; break ;;
         FAILED|TERMINATED) echo "[4/5]   pod failed: $STATUS" >&2; exit 1 ;;
@@ -130,7 +135,7 @@ done
 # ── 5. Rsync results back ────────────────────────────────────────────────────
 echo "[5/5] Downloading /app/results from pod …"
 mkdir -p "$LOCAL_RESULTS_DIR"
-runpodctl send pod "$POD_ID" --src "/app/results/" --dst "$LOCAL_RESULTS_DIR/"
+runpodctl pod send "$POD_ID" --src "/app/results/" --dst "$LOCAL_RESULTS_DIR/"
 
 echo
 echo "[done] benchmark results in $LOCAL_RESULTS_DIR"
