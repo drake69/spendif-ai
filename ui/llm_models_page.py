@@ -620,11 +620,16 @@ def _render_stats_7d(engine) -> None:
     since = datetime.now(timezone.utc) - timedelta(days=7)
     try:
         with engine.connect() as conn:
+            # SQLite lacks a built-in STDDEV — compute variance from raw
+            # moments: Var(X) = E[X^2] - E[X]^2. We expose both the mean
+            # and the standard deviation (sqrt(variance)) — easier to read
+            # because it shares the unit of the mean (seconds, not ms²).
             rows = conn.execute(
                 _sql(
                     "SELECT caller, model_id, "
                     "COUNT(*) AS n_calls, "
                     "AVG(duration_ms) AS mean_ms, "
+                    "AVG(duration_ms * duration_ms) - AVG(duration_ms) * AVG(duration_ms) AS var_ms, "
                     "SUM(total_tokens) AS tokens "
                     "FROM llm_usage_log "
                     "WHERE timestamp >= :since "
@@ -643,20 +648,29 @@ def _render_stats_7d(engine) -> None:
         st.info(t("llm_models.stats.empty"))
         return
 
-    df = pd.DataFrame(rows, columns=["caller", "model", "n_calls", "mean_ms", "tokens"])
+    df = pd.DataFrame(rows, columns=["caller", "model", "n_calls", "mean_ms", "var_ms", "tokens"])
     df["mean_s"]   = (df["mean_ms"].astype(float) / 1000.0).round(2)
+    # var_ms can be a tiny negative from FP cancellation when all samples
+    # are identical — clamp at 0 before sqrt to avoid NaN.
+    _var = df["var_ms"].astype(float).clip(lower=0.0)
+    df["std_s"]    = ((_var ** 0.5) / 1000.0).round(2)
+    df["cv_pct"]   = (df["std_s"] / df["mean_s"].replace(0, pd.NA) * 100).round(1)
     df["n_calls"]  = df["n_calls"].astype(int)
     df["tokens"]   = df["tokens"].fillna(0).astype(int)
     st.dataframe(
-        df[["caller", "model", "n_calls", "mean_s", "tokens"]],
+        df[["caller", "model", "n_calls", "mean_s", "std_s", "cv_pct", "tokens"]],
         hide_index=True,
         width="stretch",
         column_config={
             "caller":  st.column_config.TextColumn(t("llm_models.stats.col.caller")),
             "model":   st.column_config.TextColumn(t("llm_models.stats.col.model")),
             "n_calls": st.column_config.NumberColumn(t("llm_models.stats.col.n_calls"), format="%d"),
-            "mean_s":  st.column_config.NumberColumn(t("llm_models.stats.col.mean_s"), format="%.2f s"),
-            "tokens":  st.column_config.NumberColumn(t("llm_models.stats.col.tokens"), format="%d"),
+            "mean_s":  st.column_config.NumberColumn(t("llm_models.stats.col.mean_s"),  format="%.2f s"),
+            "std_s":   st.column_config.NumberColumn(t("llm_models.stats.col.std_s"),   format="%.2f s",
+                                                     help=t("llm_models.stats.col.std_s_help")),
+            "cv_pct":  st.column_config.NumberColumn(t("llm_models.stats.col.cv_pct"),  format="%.1f %%",
+                                                     help=t("llm_models.stats.col.cv_pct_help")),
+            "tokens":  st.column_config.NumberColumn(t("llm_models.stats.col.tokens"),  format="%d"),
         },
     )
 

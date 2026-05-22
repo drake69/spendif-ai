@@ -974,5 +974,9 @@
   "llm_models.model_picker.custom_option": "✏️ Benutzerdefiniert…",
   "llm_models.model_picker.custom_label": "Modell-Identifier (benutzerdefiniert)",
   "llm_models.model_picker.no_local_gguf": "Keine .gguf-Dateien in ~/.spendifai/models/. Verwenden Sie den Download-Bereich oder geben Sie einen benutzerdefinierten Pfad ein.",
-  "llm_models.model_picker.no_ollama": "Ollama nicht erreichbar unter {url}. Starten Sie ihn oder geben Sie ein Tag manuell ein."
+  "llm_models.model_picker.no_ollama": "Ollama nicht erreichbar unter {url}. Starten Sie ihn oder geben Sie ein Tag manuell ein.",
+  "llm_models.stats.col.std_s": "Standardabw.",
+  "llm_models.stats.col.std_s_help": "Standardabweichung der Latenz für dieses Modell/diese Phase. Misst, wie stark einzelne Aufrufe vom Mittelwert abweichen — hoch = unvorhersehbares Verhalten.",
+  "llm_models.stats.col.cv_pct": "VK %",
+  "llm_models.stats.col.cv_pct_help": "Variationskoeffizient = StdAbw / Mittelwert × 100. Einheitenfreies Stabilitätsmaß: <20 % sehr stabil, 20-50 % normal, >50 % stark schwankend."
 }

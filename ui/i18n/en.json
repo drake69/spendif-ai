@@ -974,5 +974,9 @@
   "llm_models.model_picker.custom_option": "✏️ Custom…",
   "llm_models.model_picker.custom_label": "Model identifier (custom)",
   "llm_models.model_picker.no_local_gguf": "No .gguf files in ~/.spendifai/models/. Use the Download section below, or enter a custom path.",
-  "llm_models.model_picker.no_ollama": "Ollama unreachable at {url}. Start it or enter a tag manually."
+  "llm_models.model_picker.no_ollama": "Ollama unreachable at {url}. Start it or enter a tag manually.",
+  "llm_models.stats.col.std_s": "Std. dev.",
+  "llm_models.stats.col.std_s_help": "Standard deviation of latency for this model/phase. Measures how individual calls deviate from the mean — high = unpredictable behaviour.",
+  "llm_models.stats.col.cv_pct": "CV %",
+  "llm_models.stats.col.cv_pct_help": "Coefficient of variation = std / mean × 100. Unit-free stability score: <20 % very stable, 20-50 % normal, >50 % highly variable."
 }

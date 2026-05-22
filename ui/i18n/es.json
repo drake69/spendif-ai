@@ -974,5 +974,9 @@
   "llm_models.model_picker.custom_option": "✏️ Personalizado…",
   "llm_models.model_picker.custom_label": "Identificador del modelo (personalizado)",
   "llm_models.model_picker.no_local_gguf": "Sin archivos .gguf en ~/.spendifai/models/. Usa la sección de Descarga, o introduce una ruta personalizada.",
-  "llm_models.model_picker.no_ollama": "Ollama no accesible en {url}. Inicia el servicio o introduce un tag manualmente."
+  "llm_models.model_picker.no_ollama": "Ollama no accesible en {url}. Inicia el servicio o introduce un tag manualmente.",
+  "llm_models.stats.col.std_s": "Desv. típ.",
+  "llm_models.stats.col.std_s_help": "Desviación típica de la latencia para este modelo/fase. Mide cuánto se desvían las llamadas individuales de la media — alta = comportamiento imprevisible.",
+  "llm_models.stats.col.cv_pct": "CV %",
+  "llm_models.stats.col.cv_pct_help": "Coeficiente de variación = desv.típ. / media × 100. Medida de estabilidad sin unidades: <20 % muy estable, 20-50 % normal, >50 % muy variable."
 }

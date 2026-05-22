@@ -974,5 +974,9 @@
   "llm_models.model_picker.custom_option": "✏️ Personnalisé…",
   "llm_models.model_picker.custom_label": "Identifiant du modèle (personnalisé)",
   "llm_models.model_picker.no_local_gguf": "Aucun fichier .gguf dans ~/.spendifai/models/. Utilisez la section Téléchargement ci-dessous, ou saisissez un chemin personnalisé.",
-  "llm_models.model_picker.no_ollama": "Ollama injoignable sur {url}. Démarrez-le ou saisissez un tag manuellement."
+  "llm_models.model_picker.no_ollama": "Ollama injoignable sur {url}. Démarrez-le ou saisissez un tag manuellement.",
+  "llm_models.stats.col.std_s": "Écart-type",
+  "llm_models.stats.col.std_s_help": "Écart-type de la latence pour ce modèle/phase. Mesure la dispersion des appels autour de la moyenne — élevé = comportement imprévisible.",
+  "llm_models.stats.col.cv_pct": "CV %",
+  "llm_models.stats.col.cv_pct_help": "Coefficient de variation = écart-type / moyenne × 100. Mesure de stabilité sans unité : <20 % très stable, 20-50 % normal, >50 % très variable."
 }
