@@ -1,0 +1,71 @@
+# Exclude bulky/unwanted files from the Docker build context to keep
+# the resulting image small (push & pull faster, RunPod boot quicker).
+#
+# What we KEEP (because the benchmark needs them):
+#   - benchmark/generated_files/*.csv  (synthetic ground-truth files)
+#   - benchmark/benchmark_models.csv   (model catalog)
+#   - benchmark/*.py                   (benchmark scripts)
+#   - core/, services/, db/, support/  (runtime code)
+#   - prompts/                         (LLM prompts)
+#   - pyproject.toml + uv.lock         (dependency resolution)
+
+# ── Local venv & build artifacts ─────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.dist-info/
+build/
+dist/
+.eggs/
+
+# ── User data, models, results — never go into the image ─────────────────────
+# Models are downloaded by the pod's entrypoint via huggingface_hub.
+# Results are mounted as a volume.
+models/
+*.gguf
+*.safetensors
+ledger.db*
+*.sqlite*
+benchmark/results/
+benchmark/logs/
+benchmark/.cache/
+.spendifai/
+~/.spendifai/
+
+# ── Editors / OS / tooling ───────────────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ── Git plumbing ─────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+
+# ── Docs we don't need inside the container ──────────────────────────────────
+docs/
+*.md
+LICENSE
+documents/
+
+# ── Test outputs (we keep tests/ source if anything imports from it, but) ────
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Other Docker artifacts (avoid recursive copies) ──────────────────────────
+docker/Dockerfile*
+docker/docker-compose*.yml
+
+# ── Hidden temp / lock files ─────────────────────────────────────────────────
+.env
+.env.*
+*.log
