@@ -49,7 +49,8 @@ except ImportError:
 
 
 _ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_RESULTS = _ROOT / "benchmark" / "results_all_runs.csv"
+_RESULTS_DIR = _ROOT / "benchmark" / "results"
+_LEGACY_AGGREGATE = _ROOT / "benchmark" / "results_all_runs.csv"
 _DEFAULT_DB_PATH = Path.home() / ".spendifai" / "ledger.db"
 _OUT_PATH = _ROOT / "benchmark" / "results_per_step.csv"
 
@@ -69,16 +70,48 @@ _CALLER_TO_PHASE = {
 }
 
 
-def _load_accuracy(results_csv: Path) -> pd.DataFrame:
-    """Load benchmark accuracy CSV, return a long-format DataFrame:
+def _load_accuracy(results_dir: Path, legacy_csv: Optional[Path] = None) -> pd.DataFrame:
+    """Load benchmark accuracy from EVERY per-run CSV in `results_dir`.
 
-        model | provider | phase | metric | value
+    The legacy `results_all_runs.csv` is a hand-merged aggregate that
+    only contains what `aggregate_results.py` ran on at some point in
+    the past — it misses recent runs (e.g. the April 2026 Qwen 9B
+    batch with 125+108 categorizer observations). Read directly from
+    the source-of-truth folder where every `benchmark_categorizer.py`
+    and `benchmark_classifier.py` invocation drops its CSV.
+
+    `legacy_csv` is used as a fallback only when `results_dir` is empty
+    or missing — useful when bench data has been pulled into a single
+    file and the per-run folder hasn't been transferred.
+
+    Returns long-format: model | provider | phase | metric | value.
     """
-    if not results_csv.is_file():
-        print(f"[warn] {results_csv} not found — skipping accuracy axis", file=sys.stderr)
+    csv_files: list[Path] = []
+    if results_dir.is_dir():
+        # Skip macOS resource-fork shadow files ("._*") that sneak in via
+        # USB/SMB transfers — they fail UTF-8 decode and aren't real CSVs.
+        csv_files = sorted(p for p in results_dir.glob("*.csv") if not p.name.startswith("._"))
+    if not csv_files and legacy_csv is not None and legacy_csv.is_file():
+        print(f"[info] {results_dir} empty — falling back to legacy {legacy_csv}", file=sys.stderr)
+        csv_files = [legacy_csv]
+    if not csv_files:
+        print(f"[warn] no benchmark CSVs found (looked in {results_dir} and {legacy_csv}) — skipping accuracy axis", file=sys.stderr)
         return pd.DataFrame(columns=["model", "provider", "phase", "metric", "value"])
 
-    df = pd.read_csv(results_csv, low_memory=False)
+    frames = []
+    for f in csv_files:
+        try:
+            d = pd.read_csv(f, low_memory=False)
+            # Tolerate per-run CSVs that don't carry these columns (older formats).
+            if "model" in d.columns and "benchmark_type" in d.columns:
+                frames.append(d)
+        except Exception as exc:
+            print(f"[warn] {f.name}: read failed — {exc}", file=sys.stderr)
+    if not frames:
+        return pd.DataFrame(columns=["model", "provider", "phase", "metric", "value"])
+    df = pd.concat(frames, ignore_index=True)
+    print(f"[info] loaded {len(df)} rows from {len(frames)} CSV(s) in {results_dir}", file=sys.stderr)
+
     rows = []
 
     # ── Classifier: 5 KPIs averaged per (model, provider) ────────────────
@@ -244,8 +277,11 @@ def _cherry_pick(matrix: pd.DataFrame) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    ap.add_argument("--results", type=Path, default=_DEFAULT_RESULTS,
-                    help=f"benchmark CSV with accuracy (default: {_DEFAULT_RESULTS})")
+    ap.add_argument("--results-dir", type=Path, default=_RESULTS_DIR,
+                    help=f"folder with per-run benchmark CSVs (default: {_RESULTS_DIR})")
+    ap.add_argument("--legacy-aggregate", type=Path, default=_LEGACY_AGGREGATE,
+                    help=("legacy hand-merged CSV used as fallback when results-dir "
+                          f"is empty (default: {_LEGACY_AGGREGATE})"))
     ap.add_argument("--db", type=Path, default=None,
                     help=("SQLite DB with llm_usage_log (default: $SPENDIFAI_DB or "
                           f"{_DEFAULT_DB_PATH})"))
@@ -261,7 +297,7 @@ def main() -> int:
         else:
             db_path = _DEFAULT_DB_PATH
 
-    acc = _load_accuracy(args.results)
+    acc = _load_accuracy(args.results_dir, legacy_csv=args.legacy_aggregate)
     lat = _load_latency(db_path)
     long_df = pd.concat([acc, lat], ignore_index=True)
     if long_df.empty:
