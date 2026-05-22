@@ -931,5 +931,7 @@
   "llm_models.credentials.save": "Save credentials",
   "llm_models.credentials.saved": "✓ Credentials saved",
   "llm_models.operations.title": "Operations",
-  "llm_models.operations.caption_stub": "Model download, backend test, calibration and usage statistics will land here (AI-91/AI-92 follow-up)."
+  "llm_models.operations.caption_stub": "Model download, backend test, calibration and usage statistics will land here (AI-91/AI-92 follow-up).",
+  "settings.llm_config_moved.title": "LLM Models",
+  "settings.llm_config_moved.body": "LLM configuration has moved to the new **🤖 LLM Models** page (sidebar entry). Per-phase backends, account credentials and operations (test, stats, download) live there."
 }

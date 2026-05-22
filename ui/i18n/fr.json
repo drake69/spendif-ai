@@ -931,5 +931,7 @@
   "llm_models.credentials.save": "Enregistrer les identifiants",
   "llm_models.credentials.saved": "✓ Identifiants enregistrés",
   "llm_models.operations.title": "Opérations",
-  "llm_models.operations.caption_stub": "Téléchargement de modèle, test, calibration et statistiques arriveront ici."
+  "llm_models.operations.caption_stub": "Téléchargement de modèle, test, calibration et statistiques arriveront ici.",
+  "settings.llm_config_moved.title": "Modèles LLM",
+  "settings.llm_config_moved.body": "La configuration LLM a été déplacée dans la nouvelle page **🤖 Modèles LLM** (entrée de navigation). Backends par phase, identifiants et opérations s'y trouvent."
 }

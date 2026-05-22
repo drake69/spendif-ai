@@ -931,5 +931,7 @@
   "llm_models.credentials.save": "Guardar credenciales",
   "llm_models.credentials.saved": "✓ Credenciales guardadas",
   "llm_models.operations.title": "Operaciones",
-  "llm_models.operations.caption_stub": "Descarga de modelo, prueba, calibración y estadísticas llegarán aquí."
+  "llm_models.operations.caption_stub": "Descarga de modelo, prueba, calibración y estadísticas llegarán aquí.",
+  "settings.llm_config_moved.title": "Modelos LLM",
+  "settings.llm_config_moved.body": "La configuración LLM se ha movido a la nueva página **🤖 Modelos LLM** (entrada de navegación). Backends por fase, credenciales y operaciones están allí."
 }

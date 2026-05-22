@@ -931,5 +931,7 @@
   "llm_models.credentials.save": "Anmeldedaten speichern",
   "llm_models.credentials.saved": "✓ Anmeldedaten gespeichert",
   "llm_models.operations.title": "Operationen",
-  "llm_models.operations.caption_stub": "Modell-Download, Backend-Test, Kalibrierung und Nutzungsstatistiken kommen hier hin."
+  "llm_models.operations.caption_stub": "Modell-Download, Backend-Test, Kalibrierung und Nutzungsstatistiken kommen hier hin.",
+  "settings.llm_config_moved.title": "LLM-Modelle",
+  "settings.llm_config_moved.body": "Die LLM-Konfiguration ist auf die neue Seite **🤖 LLM-Modelle** umgezogen (Navigationseintrag). Phase-spezifische Backends, Anmeldedaten und Operationen leben dort."
 }
