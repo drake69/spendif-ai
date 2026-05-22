@@ -981,5 +981,6 @@
   "llm_models.stats.col.cv_pct_help": "Coeficiente de variación = desv.típ. / media × 100. Medida de estabilidad sin unidades: <20 % muy estable, 20-50 % normal, >50 % muy variable.",
   "llm_models.stats.col.s_per_tx": "s/tx",
   "llm_models.stats.col.s_per_tx_help": "Tiempo medio por transacción = duración media de la llamada ÷ batch_size. Vacío para fases single-shot (classifier, footer). Útil para estimar el tiempo total de un import.",
-  "llm_models.stats.col.mean_s_help": "Latencia media de una sola llamada LLM (puede contener N transacciones en el lote). Para el tiempo por transacción ver la columna s/tx."
+  "llm_models.stats.col.mean_s_help": "Latencia media de una sola llamada LLM (puede contener N transacciones en el lote). Para el tiempo por transacción ver la columna s/tx.",
+  "upload.error_backend_load": "❌ **{filename}** no importado — error al cargar el modelo LLM.\n\n{error}\n\n👉 Abre **🤖 Modelos LLM** y verifica el archivo del modelo (Test 🧪). Si está dañado, descárgalo de nuevo."
 }

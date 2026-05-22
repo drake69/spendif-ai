@@ -981,5 +981,6 @@
   "llm_models.stats.col.cv_pct_help": "Coefficient of variation = std / mean × 100. Unit-free stability score: <20 % very stable, 20-50 % normal, >50 % highly variable.",
   "llm_models.stats.col.s_per_tx": "s/tx",
   "llm_models.stats.col.s_per_tx_help": "Mean time per single transaction = mean call duration ÷ batch_size. Blank for single-shot phases (classifier, footer) where 1 call ≠ N transactions. Useful for estimating total import time.",
-  "llm_models.stats.col.mean_s_help": "Mean latency of a single LLM call (one call may contain N transactions in a batch). For per-transaction time see the s/tx column."
+  "llm_models.stats.col.mean_s_help": "Mean latency of a single LLM call (one call may contain N transactions in a batch). For per-transaction time see the s/tx column.",
+  "upload.error_backend_load": "❌ **{filename}** not imported — failed to load the LLM model.\n\n{error}\n\n👉 Open **🤖 LLM Models** and verify the model file is valid (Test 🧪). If the file is corrupted, re-download it from the Download section."
 }

@@ -600,18 +600,41 @@ def render_upload_page(engine):
                         )
                 return _cb
 
-            result = import_svc.process_file_single(
-                raw_bytes=raw_bytes,
-                filename=filename,
-                config=config,
-                known_schema=known_schemas.get(filename),
-                progress_callback=_make_cb(
-                    file_start, file_end, filename, i, total_files,
-                    job_id, _last_db_write,
-                ),
-                account_label_override=_file_account_map.get(filename),
-                skip_rows_override=_file_skip_map.get(filename),
-            )
+            try:
+                result = import_svc.process_file_single(
+                    raw_bytes=raw_bytes,
+                    filename=filename,
+                    config=config,
+                    known_schema=known_schemas.get(filename),
+                    progress_callback=_make_cb(
+                        file_start, file_end, filename, i, total_files,
+                        job_id, _last_db_write,
+                    ),
+                    account_label_override=_file_account_map.get(filename),
+                    skip_rows_override=_file_skip_map.get(filename),
+                )
+            except Exception as exc:
+                # Most common cause here: llama-cpp-python raises ValueError
+                # ("Failed to load model from file: …") when a GGUF is
+                # truncated / corrupted / missing. Surface a friendly error
+                # instead of a Streamlit splash + traceback, and mark the
+                # job as errored so the next session doesn't think it's
+                # still running.
+                msg = t_fn("upload.error_backend_load",
+                           filename=filename, error=str(exc)[:300])
+                logger.error(
+                    f"upload_page: process_file_single failed for {filename}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                st.error(msg)
+                import_svc.update_job(
+                    job_id,
+                    status="error",
+                    status_message=str(exc)[:200],
+                    completed_at=datetime.now(timezone.utc),
+                )
+                st.session_state["llm_in_progress"] = False
+                return
 
             if result.needs_schema_review:
                 pending = st.session_state.get("_pending_schema_reviews", [])

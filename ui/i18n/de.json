@@ -981,5 +981,6 @@
   "llm_models.stats.col.cv_pct_help": "Variationskoeffizient = StdAbw / Mittelwert × 100. Einheitenfreies Stabilitätsmaß: <20 % sehr stabil, 20-50 % normal, >50 % stark schwankend.",
   "llm_models.stats.col.s_per_tx": "s/Tx",
   "llm_models.stats.col.s_per_tx_help": "Mittlere Zeit pro Einzeltransaktion = mittlere Aufrufdauer ÷ batch_size. Leer für Single-Shot-Phasen (Classifier, Footer). Nützlich zur Schätzung der Gesamt-Importzeit.",
-  "llm_models.stats.col.mean_s_help": "Mittlere Latenz eines einzelnen LLM-Aufrufs (ein Aufruf kann N Transaktionen im Batch enthalten). Pro-Transaktion siehe Spalte s/Tx."
+  "llm_models.stats.col.mean_s_help": "Mittlere Latenz eines einzelnen LLM-Aufrufs (ein Aufruf kann N Transaktionen im Batch enthalten). Pro-Transaktion siehe Spalte s/Tx.",
+  "upload.error_backend_load": "❌ **{filename}** nicht importiert — LLM-Modell konnte nicht geladen werden.\n\n{error}\n\n👉 Öffnen Sie **🤖 LLM-Modelle** und prüfen Sie die Modelldatei (Test 🧪). Bei Beschädigung erneut herunterladen."
 }
