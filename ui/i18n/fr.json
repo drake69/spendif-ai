@@ -969,5 +969,10 @@
   "llm_models.main.backend": "Backend",
   "llm_models.main.save": "Enregistrer le backend principal",
   "llm_models.main.saved": "✓ Backend principal enregistré",
-  "llm_models.main.test": "🧪 Tester"
+  "llm_models.main.test": "🧪 Tester",
+  "llm_models.model_picker.label": "Modèle",
+  "llm_models.model_picker.custom_option": "✏️ Personnalisé…",
+  "llm_models.model_picker.custom_label": "Identifiant du modèle (personnalisé)",
+  "llm_models.model_picker.no_local_gguf": "Aucun fichier .gguf dans ~/.spendifai/models/. Utilisez la section Téléchargement ci-dessous, ou saisissez un chemin personnalisé.",
+  "llm_models.model_picker.no_ollama": "Ollama injoignable sur {url}. Démarrez-le ou saisissez un tag manuellement."
 }

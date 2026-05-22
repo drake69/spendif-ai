@@ -53,6 +53,126 @@ def _backend_options_inherit_first() -> list[str]:
     return ["", *_SUPPORTED_BACKENDS]
 
 
+def _model_picker(
+    backend: str,
+    current_value: str,
+    settings: dict,
+    widget_key: str,
+    placeholder_label: str,
+) -> str:
+    """Render a backend-aware model selector and return the chosen identifier.
+
+    For backends with a discoverable catalog (local_llama_cpp, local_ollama,
+    openai, claude) → selectbox populated dynamically. For backends without
+    a useful catalog (openai_compatible, vllm, vllm_offline) → text_input
+    fallback. Always offers a "(custom)" option so power users can type a
+    value the catalog doesn't know about yet.
+    """
+    from pathlib import Path
+
+    if backend == "local_llama_cpp":
+        from services.llm_service import list_local_llama_cpp_models
+        models = list_local_llama_cpp_models() or []
+        # Each entry is {"name": stem, "path": full_path, "size_mb": ...}
+        options_paths = [m["path"] for m in models]
+        labels = {m["path"]: f"{m['name']} ({m.get('size_mb', '?')} MB)" for m in models}
+        return _selectbox_or_custom(
+            options=options_paths,
+            current=current_value,
+            labels=labels,
+            empty_hint=t("llm_models.model_picker.no_local_gguf"),
+            widget_key=widget_key,
+        )
+
+    if backend == "local_ollama":
+        from services.llm_service import list_ollama_models
+        base_url = settings.get("ollama_base_url", "http://localhost:11434")
+        models = list_ollama_models(base_url)
+        return _selectbox_or_custom(
+            options=models,
+            current=current_value,
+            empty_hint=t("llm_models.model_picker.no_ollama", url=base_url),
+            widget_key=widget_key,
+        )
+
+    if backend == "openai":
+        from services.llm_service import list_openai_models
+        models = list_openai_models(api_key=settings.get("openai_api_key", ""))
+        return _selectbox_or_custom(
+            options=models,
+            current=current_value,
+            empty_hint="",
+            widget_key=widget_key,
+        )
+
+    if backend == "claude":
+        from services.llm_service import list_anthropic_models
+        models = list_anthropic_models(api_key=settings.get("anthropic_api_key", ""))
+        return _selectbox_or_custom(
+            options=models,
+            current=current_value,
+            empty_hint="",
+            widget_key=widget_key,
+        )
+
+    # openai_compatible / vllm / vllm_offline — no curated catalog,
+    # depends on the user's deployment. Free-text input only.
+    return st.text_input(
+        placeholder_label,
+        value=current_value,
+        key=widget_key,
+    )
+
+
+def _selectbox_or_custom(
+    options: list[str],
+    current: str,
+    widget_key: str,
+    labels: dict | None = None,
+    empty_hint: str = "",
+) -> str:
+    """Render a selectbox with a `(custom)` escape hatch.
+
+    Pre-selects `current` when it's in `options`; falls back to a free
+    text input below when the user picks `(custom)` or when the catalog
+    is empty (e.g. Ollama not running, no GGUF in models dir).
+    """
+    _CUSTOM = t("llm_models.model_picker.custom_option")
+
+    if not options:
+        if empty_hint:
+            st.caption(empty_hint)
+        return st.text_input(
+            t("llm_models.model_picker.custom_label"),
+            value=current,
+            key=widget_key + "_text",
+        )
+
+    display = [_CUSTOM, *options]
+    labels = labels or {}
+    fmt = lambda v: _CUSTOM if v == _CUSTOM else labels.get(v, v)
+
+    # Default: current value if it's in options, else "(custom)"
+    if current and current in options:
+        idx = display.index(current)
+    else:
+        idx = 0
+    sel = st.selectbox(
+        t("llm_models.model_picker.label"),
+        options=display,
+        format_func=fmt,
+        index=idx,
+        key=widget_key + "_select",
+    )
+    if sel == _CUSTOM:
+        return st.text_input(
+            t("llm_models.model_picker.custom_label"),
+            value=current,
+            key=widget_key + "_text",
+        )
+    return sel
+
+
 def _current_phase_backend(settings: dict, phase: str) -> str:
     """Resolve the effective backend for a phase, with legacy fallbacks.
 
@@ -100,11 +220,12 @@ def _render_main_backend(svc: SettingsService, settings: dict) -> None:
     new_vals: dict[str, str] = {"llm_backend": sel}
 
     if sel == "local_llama_cpp":
-        new_vals["llama_cpp_model_path"] = st.text_input(
-            t("llm_models.phase.local_llama_cpp.model_path"),
-            value=settings.get("llama_cpp_model_path", ""),
-            placeholder=t("llm_models.phase.local_llama_cpp.model_path_placeholder"),
-            key="_llmpage_main_lcpp_path",
+        new_vals["llama_cpp_model_path"] = _model_picker(
+            backend=sel,
+            current_value=settings.get("llama_cpp_model_path", ""),
+            settings=settings,
+            widget_key="_llmpage_main_lcpp",
+            placeholder_label=t("llm_models.phase.local_llama_cpp.model_path"),
         )
         with st.expander(t("llm_models.phase.advanced"), expanded=False):
             new_vals["llama_cpp_n_gpu_layers"] = str(st.number_input(
@@ -121,32 +242,36 @@ def _render_main_backend(svc: SettingsService, settings: dict) -> None:
                 key="_llmpage_main_lcpp_ctx",
             ))
     elif sel == "local_ollama":
-        new_vals["ollama_model"] = st.text_input(
-            t("llm_models.phase.local_ollama.model"),
-            value=settings.get("ollama_model", ""),
-            placeholder="gemma3:12b",
-            key="_llmpage_main_ollama_model",
+        new_vals["ollama_model"] = _model_picker(
+            backend=sel,
+            current_value=settings.get("ollama_model", ""),
+            settings=settings,
+            widget_key="_llmpage_main_ollama",
+            placeholder_label=t("llm_models.phase.local_ollama.model"),
         )
     elif sel == "openai":
-        new_vals["openai_model"] = st.text_input(
-            t("llm_models.phase.openai.model"),
-            value=settings.get("openai_model", ""),
-            placeholder="gpt-4o-mini",
-            key="_llmpage_main_openai_model",
+        new_vals["openai_model"] = _model_picker(
+            backend=sel,
+            current_value=settings.get("openai_model", ""),
+            settings=settings,
+            widget_key="_llmpage_main_openai",
+            placeholder_label=t("llm_models.phase.openai.model"),
         )
     elif sel == "claude":
-        new_vals["anthropic_model"] = st.text_input(
-            t("llm_models.phase.claude.model"),
-            value=settings.get("anthropic_model", ""),
-            placeholder="claude-haiku-4-5-20251001",
-            key="_llmpage_main_anthropic_model",
+        new_vals["anthropic_model"] = _model_picker(
+            backend=sel,
+            current_value=settings.get("anthropic_model", ""),
+            settings=settings,
+            widget_key="_llmpage_main_claude",
+            placeholder_label=t("llm_models.phase.claude.model"),
         )
     elif sel == "openai_compatible":
-        new_vals["compat_model"] = st.text_input(
-            t("llm_models.phase.compat.model"),
-            value=settings.get("compat_model", ""),
-            placeholder=t("llm_models.phase.compat.model_placeholder"),
-            key="_llmpage_main_compat_model",
+        new_vals["compat_model"] = _model_picker(
+            backend=sel,
+            current_value=settings.get("compat_model", ""),
+            settings=settings,
+            widget_key="_llmpage_main_compat",
+            placeholder_label=t("llm_models.phase.compat.model"),
         )
     elif sel in ("vllm", "vllm_offline"):
         st.caption(t("llm_models.phase.vllm.note"))
@@ -366,11 +491,12 @@ def _render_phase_card(svc: SettingsService, settings: dict, phase: str, icon: s
         # Backend-specific fields. Account credentials live in the section above
         # and are reused — we only ask for the model identifier here.
         if sel == "local_llama_cpp":
-            new_vals[f"{phase}_llama_cpp_model_path"] = st.text_input(
-                t("llm_models.phase.local_llama_cpp.model_path"),
-                value=settings.get(f"{phase}_llama_cpp_model_path", ""),
-                placeholder=t("llm_models.phase.local_llama_cpp.model_path_placeholder"),
-                key=f"_llmpage_{phase}_lcpp_path",
+            new_vals[f"{phase}_llama_cpp_model_path"] = _model_picker(
+                backend=sel,
+                current_value=settings.get(f"{phase}_llama_cpp_model_path", ""),
+                settings=settings,
+                widget_key=f"_llmpage_{phase}_lcpp",
+                placeholder_label=t("llm_models.phase.local_llama_cpp.model_path"),
             )
             with st.expander(t("llm_models.phase.advanced"), expanded=False):
                 new_vals[f"{phase}_llama_cpp_n_gpu_layers"] = str(st.number_input(
@@ -387,32 +513,36 @@ def _render_phase_card(svc: SettingsService, settings: dict, phase: str, icon: s
                     key=f"_llmpage_{phase}_lcpp_ctx",
                 ))
         elif sel == "local_ollama":
-            new_vals[f"{phase}_ollama_model"] = st.text_input(
-                t("llm_models.phase.local_ollama.model"),
-                value=settings.get(f"{phase}_ollama_model", ""),
-                placeholder="qwen2.5:3b",
-                key=f"_llmpage_{phase}_ollama_model",
+            new_vals[f"{phase}_ollama_model"] = _model_picker(
+                backend=sel,
+                current_value=settings.get(f"{phase}_ollama_model", ""),
+                settings=settings,
+                widget_key=f"_llmpage_{phase}_ollama",
+                placeholder_label=t("llm_models.phase.local_ollama.model"),
             )
         elif sel == "openai":
-            new_vals[f"{phase}_openai_model"] = st.text_input(
-                t("llm_models.phase.openai.model"),
-                value=settings.get(f"{phase}_openai_model", ""),
-                placeholder="gpt-4o-mini",
-                key=f"_llmpage_{phase}_openai_model",
+            new_vals[f"{phase}_openai_model"] = _model_picker(
+                backend=sel,
+                current_value=settings.get(f"{phase}_openai_model", ""),
+                settings=settings,
+                widget_key=f"_llmpage_{phase}_openai",
+                placeholder_label=t("llm_models.phase.openai.model"),
             )
         elif sel == "claude":
-            new_vals[f"{phase}_anthropic_model"] = st.text_input(
-                t("llm_models.phase.claude.model"),
-                value=settings.get(f"{phase}_anthropic_model", ""),
-                placeholder="claude-haiku-4-5-20251001",
-                key=f"_llmpage_{phase}_anthropic_model",
+            new_vals[f"{phase}_anthropic_model"] = _model_picker(
+                backend=sel,
+                current_value=settings.get(f"{phase}_anthropic_model", ""),
+                settings=settings,
+                widget_key=f"_llmpage_{phase}_claude",
+                placeholder_label=t("llm_models.phase.claude.model"),
             )
         elif sel == "openai_compatible":
-            new_vals[f"{phase}_compat_model"] = st.text_input(
-                t("llm_models.phase.compat.model"),
-                value=settings.get(f"{phase}_compat_model", ""),
-                placeholder=t("llm_models.phase.compat.model_placeholder"),
-                key=f"_llmpage_{phase}_compat_model",
+            new_vals[f"{phase}_compat_model"] = _model_picker(
+                backend=sel,
+                current_value=settings.get(f"{phase}_compat_model", ""),
+                settings=settings,
+                widget_key=f"_llmpage_{phase}_compat",
+                placeholder_label=t("llm_models.phase.compat.model"),
             )
         elif sel in ("vllm", "vllm_offline"):
             st.caption(t("llm_models.phase.vllm.note"))

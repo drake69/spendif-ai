@@ -92,6 +92,101 @@ def list_local_llama_cpp_models() -> list[dict[str, Any]]:
     return LlamaCppBackend.list_local_models()
 
 
+def list_ollama_models(base_url: str = "http://localhost:11434", timeout: int = 5) -> list[str]:
+    """Return tags of models installed on the Ollama server. Empty list when
+    Ollama isn't reachable or no models are pulled — caller decides whether
+    to render a free-text fallback.
+    """
+    import urllib.error
+    import urllib.request
+    import json as _json
+    url = base_url.rstrip("/") + "/api/tags"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return []
+    models = data.get("models") or []
+    return sorted({m.get("name", "") for m in models if m.get("name")})
+
+
+# Curated fallback used when the live API can't be queried (no key, network
+# failure, rate-limited). Update as new flagship models ship.
+KNOWN_OPENAI_MODELS = (
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-3.5-turbo",
+    "o1-mini",
+)
+
+KNOWN_ANTHROPIC_MODELS = (
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5",
+    "claude-opus-4-7",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+)
+
+
+def list_openai_models(api_key: str = "", timeout: int = 5) -> list[str]:
+    """List OpenAI chat-completion models via the live `/v1/models` endpoint.
+
+    Filters down to GPT/O-series identifiers (skips embeddings, whisper,
+    image, tts, etc.). Returns the curated fallback when no key is set
+    or the request fails.
+    """
+    if not api_key:
+        return list(KNOWN_OPENAI_MODELS)
+    import urllib.error
+    import urllib.request
+    import json as _json
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return list(KNOWN_OPENAI_MODELS)
+    ids = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+    # Keep only chat-completion candidates (gpt-*, o1-*, o3-*) — drop
+    # embeddings, whisper, tts, dalle, etc. that would clutter the UI.
+    chat = [i for i in ids if i.startswith(("gpt-", "o1-", "o3-", "o4-", "chatgpt-"))]
+    return sorted(chat) if chat else list(KNOWN_OPENAI_MODELS)
+
+
+def list_anthropic_models(api_key: str = "", timeout: int = 5) -> list[str]:
+    """List Anthropic chat models via the live `/v1/models` endpoint.
+
+    Returns the curated fallback when no key is set or the request fails.
+    """
+    if not api_key:
+        return list(KNOWN_ANTHROPIC_MODELS)
+    import urllib.error
+    import urllib.request
+    import json as _json
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/models",
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return list(KNOWN_ANTHROPIC_MODELS)
+    ids = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+    return sorted(ids) if ids else list(KNOWN_ANTHROPIC_MODELS)
+
+
 def get_default_gguf_models() -> dict:
     """Return the DEFAULT_GGUF_MODELS dict for the download UI."""
     from core.llm_backends import DEFAULT_GGUF_MODELS
