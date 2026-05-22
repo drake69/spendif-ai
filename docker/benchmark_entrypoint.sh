@@ -157,7 +157,14 @@ fi
 echo ""
 echo "→ Copying results to $RESULTS_DIR..."
 mkdir -p "$RESULTS_DIR"
-cp benchmark/generated_files/benchmark/*.csv "$RESULTS_DIR/" 2>/dev/null || true
+# benchmark_categorizer.py / benchmark_classifier.py write their CSVs into
+# `benchmark/results/` (see `_RESULTS_ARCHIVE_DIR = _TESTS_DIR / "results"`
+# in benchmark_categorizer.py:71). Copy from there to the mounted output
+# directory so `runpodctl send pod` picks them up.
+cp benchmark/results/*.csv "$RESULTS_DIR/" 2>/dev/null || true
+cp benchmark/results_all_runs.csv "$RESULTS_DIR/" 2>/dev/null || true
+echo "→ Files in $RESULTS_DIR:"
+ls -lh "$RESULTS_DIR/" 2>/dev/null || true
 
 echo ""
 echo "============================================================"
