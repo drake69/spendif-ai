@@ -95,6 +95,13 @@ fi
 # ── 3. Launch the pod ────────────────────────────────────────────────────────
 echo "[3/5] Creating RunPod pod ($GPU community-cloud)…"
 POD_NAME="spendify-bench-$(date +%s)"
+# runpodctl notes:
+#  * `--communityCloud` is the right flag for the cheap community cloud
+#    (was incorrectly `--secureCloud false` which isn't a thing — that
+#    flag is a presence-only bool that opts INTO secure cloud).
+#  * JSON output is the default (`-o, --output string … (default "json")`)
+#    so no `--json` flag needed; an explicit `--output json` would also
+#    work but it's a global flag and must appear BEFORE the subcommand.
 POD_ID="$(runpodctl create pod \
     --name        "$POD_NAME" \
     --imageName   "$IMAGE" \
@@ -102,9 +109,8 @@ POD_ID="$(runpodctl create pod \
     --gpuCount    1 \
     --containerDiskSize 20 \
     --volumeSize  20 \
-    --secureCloud false \
+    --communityCloud \
     --args "--models $MODELS --runs $RUNS --files $FILES" \
-    --json \
     | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["id"])')"
 
 echo "[3/5]   pod id: $POD_ID"
@@ -113,7 +119,7 @@ trap 'echo "[cleanup] stopping pod $POD_ID …"; runpodctl stop pod "$POD_ID" 2>
 # ── 4. Wait for completion ───────────────────────────────────────────────────
 echo "[4/5] Waiting for pod to reach EXITED / SUCCEEDED …"
 while true; do
-    STATUS="$(runpodctl get pod "$POD_ID" --json | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["desiredStatus"])' 2>/dev/null || echo UNKNOWN)"
+    STATUS="$(runpodctl get pod "$POD_ID" | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["desiredStatus"])' 2>/dev/null || echo UNKNOWN)"
     case "$STATUS" in
         EXITED|SUCCEEDED) echo "[4/5]   pod completed"; break ;;
         FAILED|TERMINATED) echo "[4/5]   pod failed: $STATUS" >&2; exit 1 ;;
