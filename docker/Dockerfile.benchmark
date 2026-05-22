@@ -12,18 +12,20 @@ FROM nvidia/cuda:13.2.1-runtime-ubuntu22.04
 
 # ── System deps ──────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3.11-venv python3-pip git curl \
+    git curl ca-certificates build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Use python3.11 as default
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-
 # ── uv ───────────────────────────────────────────────────────────────────────
+# The project's pyproject.toml requires Python >=3.12,<3.14. The CUDA base
+# image ships Python 3.11. Instead of pinning the apt python3.11 from the
+# base image (which uv refuses to use because of the requires-python
+# constraint), let uv download and manage a compatible Python on the
+# fly — that's exactly what UV_PYTHON_DOWNLOADS=auto enables.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-ENV UV_PYTHON_DOWNLOADS=0
+ENV UV_PYTHON_DOWNLOADS=auto
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
