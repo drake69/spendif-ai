@@ -981,7 +981,7 @@ def process_file(
     # Apply schema → canonical transactions
     _total_file_rows = len(df_raw)
     transactions, _norm_skipped, _merge_count = _normalize_df_with_schema(df_raw, doc_schema, filename)
-    _progress(0.35, "extracting")
+    _progress(0.30, "extracting")
 
     # ── Schema auto-invalidation ─────────────────────────────────────────────
     # If a cached schema (Flow 1) produces a catastrophically low parse rate,
@@ -1127,7 +1127,15 @@ def process_file(
                 skipped_rows=_norm_skipped,
                 merged_count=_merge_count,
             )
-    _progress(0.38, "cleaning")
+    _progress(0.35, "cleaning")
+
+    # Map cleaner overall progress (0..1) → file progress (0.35..0.70).
+    # Cleaning occupies ~half of the wall-clock time on local LLMs so it gets
+    # ~35 pp of the bar; the previous 0.38→0.40 slot left the bar frozen
+    # for minutes while the model decoded thousands of structured tokens.
+    def _cleaning_cb(p: float):
+        frac = max(0.0, min(1.0, p))
+        _progress(0.35 + 0.35 * frac, "cleaning")
 
     # ── Description cleaning: extract counterpart name (pre-categorization) ──
     # Sends descriptions to LLM to strip payment-method boilerplate and keep
@@ -1136,12 +1144,19 @@ def process_file(
     # Owner names are replaced with fake but plausible aliases (e.g. "Carlo
     # Brambilla") so the LLM extracts them as real names; aliases are restored
     # to the real owner names after extraction.
+    # Cleaning and categorization share the same workload profile:
+    # large batched structured output on repetitive descriptions, run
+    # hundreds of times per file. Both benefit from the smaller dedicated
+    # model when the user configures `cat_llm_backend`. Falls back to the
+    # main backend otherwise (cat_backend == backend in that case — see
+    # the `or backend` above).
     transactions = clean_descriptions_batch(
         transactions,
-        llm_backend=backend,
+        llm_backend=cat_backend,
         fallback_backend=fallback,
         source_name=filename,
         sanitize_config=config.sanitize_config,
+        progress_callback=_cleaning_cb,
     )
 
     # Build DataFrame for transfer detection
@@ -1213,8 +1228,8 @@ def process_file(
     to_categorize = tx_df[tx_df["tx_type"].isin(categorizable_types)].to_dict("records")
 
     def _cat_cb(frac: float):
-        # Map categorization progress (0..1) → file progress (0.40..1.0)
-        _progress(0.40 + 0.60 * frac, "categorizing")
+        # Map categorization progress (0..1) → file progress (0.70..1.0)
+        _progress(0.70 + 0.30 * frac, "categorizing")
 
     cat_results = categorize_batch(
         transactions=to_categorize,
