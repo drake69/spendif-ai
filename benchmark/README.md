@@ -1,5 +1,7 @@
 # Spendif.ai — Benchmark
 
+> **Cloud execution available** — see [Cloud benchmark (RunPod)](#cloud-benchmark-runpod) below. Run the full per-step matrix in ~1 hour for ~$0.34 instead of 4-6 hours blocking your laptop.
+
 ## Quick Start (zero-config)
 
 Su una macchina qualsiasi — anche appena clonata o copiata su chiavetta USB.
@@ -1067,3 +1069,106 @@ uv run python benchmark/aggregate_results.py --list
 - Azure ML benchmark: `benchmark/azure_benchmark.py`, `benchmark/azure_run_cloud.sh`
 - Catalogo modelli: `benchmark/benchmark_models.csv`
 - Strategia benchmark (architettura, OLS, workflow): `documents/04_software_engineering/09_benchmark_strategy.tex`
+
+## Cloud benchmark (RunPod)
+
+Run the full per-step matrix on an NVIDIA RTX 4090 (or A100, H100) in
+the cloud in ~1 hour for ~$0.34, instead of 4-6 hours blocking the
+local laptop.
+
+### One-time setup (~10 minutes)
+
+You need two free API tokens:
+
+1. **GitHub Personal Access Token** — to push the Docker image to
+   `ghcr.io`. Generate at https://github.com/settings/tokens (classic)
+   with scopes `write:packages` and `read:packages`. Login locally:
+
+   ```bash
+   echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
+   ```
+
+2. **RunPod API Key** — to create/manage GPU pods. Generate at
+   https://www.runpod.io/console/user/settings → API Keys. Top up the
+   wallet with at least $10 (RunPod refuses to create pods without
+   funds).
+
+   ```bash
+   brew install runpodctl                          # or pip install runpodctl
+   runpodctl config --apiKey "$RUNPOD_API_KEY"     # or set env var
+   ```
+
+### Smoke test (~5 min, < $0.05)
+
+Verifies the end-to-end works on your account:
+
+```bash
+benchmark/run_on_runpod.sh \
+  --image ghcr.io/YOUR_GITHUB_USER/spendify-bench:latest \
+  --models qwen2.5-3b \
+  --runs 1 \
+  --files 5
+```
+
+The script builds the image locally, pushes to ghcr.io, creates a Pod
+on RunPod, polls until done, rsyncs results back to
+`benchmark/results/`, and stops the pod automatically (via cleanup
+trap on EXIT/INT/TERM — important: dormant pods keep billing).
+
+### Full AI-92 matrix (~1 hour, ~$0.34)
+
+```bash
+benchmark/run_on_runpod.sh \
+  --image ghcr.io/YOUR_GITHUB_USER/spendify-bench:latest \
+  --gpu "NVIDIA GeForce RTX 4090" \
+  --models "qwen2.5-1.5b,qwen2.5-3b,qwen3.5-9b-q3,gemma3:12b,qwen2.5:7b" \
+  --runs 1 \
+  --files 50
+```
+
+Then aggregate locally:
+
+```bash
+uv run python benchmark/aggregate_per_step.py
+```
+
+### Rerun without rebuilding (no code change)
+
+```bash
+benchmark/run_on_runpod.sh \
+  --skip-build --skip-push \
+  --models qwen3.5-9b-q3 \
+  --runs 3
+```
+
+### Cost reference
+
+| Scenario | Duration | GPU | Cost |
+|---|---|---|---|
+| 1 model × 5 files (smoke) | ~5 min | RTX 4090 community | ~$0.03 |
+| 1 model × 50 files | ~15 min | RTX 4090 community | ~$0.09 |
+| **5 models × 50 files (AI-92 matrix)** | **~1 h** | **RTX 4090 community** | **~$0.34** |
+| Matrix × 3 runs (statistical solidity) | ~3 h | RTX 4090 community | ~$1.00 |
+| Matrix on A100 80GB | ~30 min | A100 community | ~$0.60 |
+
+### Flags reference
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--image` | `ghcr.io/$GITHUB_USER/spendify-bench:latest` | Docker image to use |
+| `--gpu` | `"NVIDIA GeForce RTX 4090"` | RunPod GPU type |
+| `--models` | `qwen2.5-1.5b,qwen2.5-3b,qwen3.5-9b-q3` | comma-separated model IDs |
+| `--runs` | `1` | repetitions per file |
+| `--files` | `50` | number of ground-truth files |
+| `--skip-build` | off | skip `docker build` (use cached image) |
+| `--skip-push` | off | skip `docker push` (use existing remote tag) |
+| `--results-dir` | `./benchmark/results` | where to rsync the CSVs |
+
+### Alternative: Modal (no registry)
+
+`pip install modal && modal token new` (free $30 welcome credit). The
+`benchmark/run_on_modal.py` script is planned in AI-99 PR-2 — same
+flow but no docker push, Python-first.
+
+Full architectural rationale: §16 of
+`documents/04_software_engineering/09_benchmark_strategy.tex`.
