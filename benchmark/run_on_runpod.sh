@@ -123,15 +123,36 @@ POD_NAME="spendify-bench-$(date +%s)"
 #   --containerDiskSize → --container-disk-in-gb
 #   --communityCloud    → --cloud-type COMMUNITY
 #   --args              → --docker-args
-POD_ID="$(runpodctl pod create \
+# Capture the raw JSON so we can also surface it on error.
+_CREATE_JSON="$(runpodctl pod create \
     --name                 "$POD_NAME" \
     --image                "$IMAGE" \
     --gpu-id               "$GPU" \
     --gpu-count            1 \
     --container-disk-in-gb "$DISK_GB" \
     --cloud-type           "$CLOUD_TYPE" \
-    --docker-args          "--models $MODELS --runs $RUNS --files $FILES" \
-    | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["id"])')"
+    --docker-args          "--models $MODELS --runs $RUNS --files $FILES")"
+
+# The old runpodctl (camelCase flags) returned `{"pod":{"id":"..."}}`.
+# The new one (kebab-case flags) returns either `{"id":"..."}` or a
+# variant with `podId`. Try all three shapes so the wrapper survives
+# future schema bumps. On failure, echo the JSON to stderr so the user
+# can see what the CLI actually returned.
+POD_ID="$(echo "$_CREATE_JSON" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+candidates = [
+    (data.get("pod") or {}).get("id"),
+    data.get("id"),
+    data.get("podId"),
+    (data.get("data") or {}).get("id"),
+]
+pid = next((c for c in candidates if c), None)
+if not pid:
+    print(json.dumps(data, indent=2), file=sys.stderr)
+    sys.exit("could not find pod id in runpodctl response (see stderr)")
+print(pid)
+')" || { echo "[3/5]   raw JSON above. clean up any orphan with: runpodctl pod list, then runpodctl pod stop <id> + remove <id>" >&2; exit 1; }
 
 echo "[3/5]   pod id: $POD_ID"
 trap 'echo "[cleanup] stopping pod $POD_ID …"; runpodctl pod stop "$POD_ID" 2>/dev/null || true; runpodctl pod remove "$POD_ID" 2>/dev/null || true' EXIT INT TERM
@@ -139,7 +160,15 @@ trap 'echo "[cleanup] stopping pod $POD_ID …"; runpodctl pod stop "$POD_ID" 2>
 # ── 4. Wait for completion ───────────────────────────────────────────────────
 echo "[4/5] Waiting for pod to reach EXITED / SUCCEEDED …"
 while true; do
-    STATUS="$(runpodctl pod get "$POD_ID" | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["desiredStatus"])' 2>/dev/null || echo UNKNOWN)"
+    STATUS="$(runpodctl pod get "$POD_ID" | python3 -c '
+import sys, json
+data = json.load(sys.stdin)
+for key in ("desiredStatus", "status"):
+    for source in (data.get("pod"), data, data.get("data")):
+        if isinstance(source, dict) and source.get(key):
+            print(source[key]); sys.exit()
+print("UNKNOWN")
+' 2>/dev/null || echo UNKNOWN)"
     case "$STATUS" in
         EXITED|SUCCEEDED) echo "[4/5]   pod completed"; break ;;
         FAILED|TERMINATED) echo "[4/5]   pod failed: $STATUS" >&2; exit 1 ;;
