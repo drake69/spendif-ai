@@ -727,6 +727,17 @@ def _classify_column_content(
     if n < _CONTENT_MIN_SAMPLE:
         return "text"
 
+    # ── Identifier guard (AI-107) ────────────────────────────────────────────
+    # A column whose every non-null value is identical can't be a date OR an
+    # amount — it's a constant identifier such as a card number, an account
+    # number, an IBAN, or a file-wide timestamp. The classifier used to
+    # accept such columns as amount candidates whenever they matched the
+    # amount regex (e.g. "-1234567890123456" for a card number), which led
+    # the LLM to occasionally pick them as `amount_col`.
+    # We require >= 5 samples to avoid false-positives on tiny test data.
+    if n >= 5 and samples.nunique() == 1:
+        return "text"
+
     date_hits   = samples.apply(lambda v: bool(_CONTENT_DATE_RE.match(v))).sum()
     amount_hits = samples.apply(lambda v: bool(_CONTENT_AMOUNT_RE.match(v))).sum()
 
