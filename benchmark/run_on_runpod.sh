@@ -108,14 +108,25 @@ POD_NAME="spendify-bench-$(date +%s)"
 #    capacity for the requested GPU, RunPod returns "This machine does
 #    not have the resources to deploy your pod" — try a different GPU
 #    via --gpu or wait a few minutes.
+# NB: runpodctl recently rewrote the flag layout from camelCase to
+# kebab-case and renamed many flags:
+#   --imageName         → --image
+#   --gpuType           → --gpu-id            (still takes the GPU display
+#                                              name, e.g. "NVIDIA GeForce
+#                                              RTX 4090", confirmed against
+#                                              the public catalogue)
+#   --gpuCount          → --gpu-count
+#   --containerDiskSize → --container-disk-in-gb
+#   --communityCloud    → --cloud-type COMMUNITY
+#   --args              → --docker-args
 POD_ID="$(runpodctl pod create \
-    --name        "$POD_NAME" \
-    --imageName   "$IMAGE" \
-    --gpuType     "$GPU" \
-    --gpuCount    1 \
-    --containerDiskSize 15 \
-    --communityCloud \
-    --args "--models $MODELS --runs $RUNS --files $FILES" \
+    --name                 "$POD_NAME" \
+    --image                "$IMAGE" \
+    --gpu-id               "$GPU" \
+    --gpu-count            1 \
+    --container-disk-in-gb 15 \
+    --cloud-type           COMMUNITY \
+    --docker-args          "--models $MODELS --runs $RUNS --files $FILES" \
     | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["id"])')"
 
 echo "[3/5]   pod id: $POD_ID"
