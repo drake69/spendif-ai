@@ -31,6 +31,18 @@ ENV PYTHONDONTWRITEBYTECODE=1
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
+# ── llama-cpp-python with CUDA acceleration ──────────────────────────────────
+# The default PyPI wheel of llama-cpp-python is CPU-only. On a CUDA base
+# image the model would still load but run on the container's CPU,
+# wasting the GPU. Reinstall the CUDA-enabled prebuilt wheel from
+# abetlen's index — same version pinned in uv.lock, just compiled with
+# GGML_CUDA=on. Roughly 5-10× speedup on Ampere/Ada cards.
+# When abetlen drops the cu121 wheel for a newer release, bump the
+# tag here in lockstep with the uv.lock pin.
+ARG LLAMA_CPP_CUDA_TAG=cu121
+RUN UV_EXTRA_INDEX_URL="https://abetlen.github.io/llama-cpp-python/whl/${LLAMA_CPP_CUDA_TAG}" \
+    uv pip install --upgrade --force-reinstall --no-deps "llama-cpp-python"
+
 COPY . .
 ENV PATH="/app/.venv/bin:$PATH"
 
