@@ -701,6 +701,16 @@ DEFAULT_GGUF_MODELS = {
         "size_gb": 2.5,
         "description": "Google Gemma 4 E2B — versione compressa, per Mac con RAM limitata",
     },
+    "Qwen2.5-1.5B-Instruct-Q4_K_M": {
+        "url": "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        "size_gb": 1.0,
+        "description": "Qwen 2.5 1.5B — classifier leader nei benchmark (100% AM, n=150)",
+    },
+    "Qwen2.5-3B-Instruct-Q4_K_M": {
+        "url": "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+        "size_gb": 1.9,
+        "description": "Qwen 2.5 3B — ottimo per cleaner (NER batched, veloce, ~50 tok/s su Apple Silicon)",
+    },
     "Qwen3.5-2B-Q4_K_M": {
         "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
         "size_gb": 1.7,
