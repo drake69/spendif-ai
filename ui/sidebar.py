@@ -17,6 +17,7 @@ _NAV_KEYS = [
     ("review",          "review"),
     ("rules",           "rules"),
     ("taxonomy",        "taxonomy"),
+    ("llm_models",      "llm_models"),
     ("settings",        "settings"),
     ("checklist",       "checklist"),
     ("chat",            "chat"),
