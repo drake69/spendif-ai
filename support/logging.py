@@ -41,6 +41,24 @@ def _resolve_log_dir() -> Path:
 
 
 def setup_logging():
+    # Streamlit re-imports every module on each rerun and every module that
+    # writes logs does `logger = setup_logging()` at import time, so this
+    # function is called dozens of times per session. Two problems if we
+    # don't guard:
+    #   1. `logging.basicConfig(...)` is a no-op once the root logger has
+    #      handlers — so after the first call, our reconfiguration silently
+    #      does nothing.
+    #   2. We still compute `log_file = ... datetime.now() ...` and open a
+    #      brand-new FileHandler on disk, which gets dropped on the floor
+    #      because basicConfig didn't attach it. Result: hundreds of empty
+    #      `app_<timestamp>.log` files in the log dir, only the very first
+    #      one (whose handler actually got attached) captures anything.
+    # Guard: if the root logger is already configured, just return the
+    # named logger without touching the filesystem.
+    spendify_logger = logging.getLogger("SPENDIFY")
+    if logging.getLogger().handlers:
+        return spendify_logger
+
     log_dir = _resolve_log_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -55,4 +73,4 @@ def setup_logging():
         ],
     )
 
-    return logging.getLogger("SPENDIFY")
+    return spendify_logger
