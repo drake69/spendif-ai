@@ -319,7 +319,8 @@ def render_llm_models_page(engine) -> None:
     _render_stats_7d(engine)
     st.divider()
     _render_calibrate_stub()
-    _render_download_stub()
+    st.divider()
+    _render_download()
 
 
 def _render_stats_7d(engine) -> None:
@@ -384,6 +385,79 @@ def _render_calibrate_stub() -> None:
     )
 
 
-def _render_download_stub() -> None:
+def _render_download() -> None:
+    """List predefined GGUF models, exclude already-installed ones, allow download.
+
+    Synchronous download with a live progress bar driven by the callback
+    of `LlamaCppBackend.download_model`. The Streamlit script blocks
+    during the transfer (matches the existing UX from the old Settings
+    download widget); a deferred background-thread version with the
+    `~/.spendifai/model_download.status` file used by the launcher is
+    follow-up work.
+    """
+    from pathlib import Path
+
+    from core.llm_backends import LlamaCppBackend
+    from services.llm_service import download_gguf_model, get_default_gguf_models
+
     st.markdown(f"**{t('llm_models.download.title')}**")
-    st.caption(t("llm_models.download.caption_stub"))
+    st.caption(t("llm_models.download.caption"))
+
+    catalog = get_default_gguf_models() or {}
+    local = LlamaCppBackend.list_local_models()
+    local_stems = {item["name"] for item in local} if local else set()
+    available = {k: v for k, v in catalog.items() if k not in local_stems}
+
+    if not available:
+        st.success(t("llm_models.download.all_present"))
+        # Still surface what's installed, for orientation.
+        if local:
+            with st.expander(t("llm_models.download.installed_label"), expanded=False):
+                for item in local:
+                    size_mb = item.get("size_mb")
+                    size_label = f"{size_mb:.0f} MB" if isinstance(size_mb, (int, float)) else ""
+                    st.markdown(f"- `{item['name']}` {size_label}")
+        return
+
+    options = list(available.keys())
+    sel = st.selectbox(
+        t("llm_models.download.choose"),
+        options=options,
+        format_func=lambda k: f"{k} — {available[k].get('size_gb', '?')} GB",
+        key="_llmpage_dl_choice",
+    )
+    if sel:
+        st.caption(available[sel].get("description", ""))
+
+    if st.button(
+        t("llm_models.download.btn"),
+        type="primary",
+        key="_llmpage_dl_btn",
+    ):
+        url = available[sel]["url"]
+        # Save under ~/.spendifai/models/<stem>.gguf (mirrors registry naming).
+        dest = str(Path.home() / ".spendifai" / "models" / f"{sel}.gguf")
+        prog = st.progress(0.0)
+        status = st.empty()
+
+        def _cb(bytes_done: int, total_size: int) -> None:
+            if total_size and total_size > 0:
+                pct = min(bytes_done / total_size, 1.0)
+                prog.progress(pct)
+                status.text(
+                    t("llm_models.download.in_progress",
+                      pct=int(pct * 100),
+                      done_mb=bytes_done // (1024 * 1024),
+                      total_mb=total_size // (1024 * 1024))
+                )
+
+        try:
+            with st.spinner(t("llm_models.download.starting")):
+                final_path = download_gguf_model(url, dest, progress_callback=_cb)
+            prog.progress(1.0)
+            st.success(t("llm_models.download.done", path=final_path))
+            logger.info(f"llm_models_page: downloaded {sel} to {final_path}")
+            st.rerun()
+        except Exception as exc:
+            st.error(t("llm_models.download.error", error=str(exc)[:200]))
+            logger.warning(f"llm_models_page: download {sel} failed: {exc}")

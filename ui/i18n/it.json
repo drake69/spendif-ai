@@ -955,5 +955,13 @@
   "llm_models.calibrate.btn": "Calibra modelli",
   "llm_models.calibrate.coming_soon": "In arrivo con AI-91.",
   "llm_models.download.title": "📥 Scarica nuovo modello",
-  "llm_models.download.caption_stub": "Per ora il download è disponibile dalla pagina Impostazioni (in migrazione qui — AI-96 PR-4)."
+  "llm_models.download.caption": "Scegli un modello dal catalogo. Verrà scaricato in ~/.spendifai/models/. Il browser può sembrare bloccato durante il trasferimento — è normale.",
+  "llm_models.download.choose": "Modello da scaricare",
+  "llm_models.download.btn": "📥 Scarica modello",
+  "llm_models.download.starting": "Avvio download…",
+  "llm_models.download.in_progress": "{pct}% — {done_mb} / {total_mb} MB",
+  "llm_models.download.done": "✓ Scaricato in {path}",
+  "llm_models.download.error": "✗ Download fallito: {error}",
+  "llm_models.download.all_present": "Tutti i modelli del catalogo sono già installati.",
+  "llm_models.download.installed_label": "Modelli locali installati"
 }
