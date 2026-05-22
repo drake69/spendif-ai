@@ -821,7 +821,17 @@ class LlamaCppBackend(LLMBackend):
 
     @staticmethod
     def download_model(url: str, dest: str | None = None, progress_callback=None) -> str:
-        """Download a GGUF model from a URL (e.g., HuggingFace).
+        """Download a GGUF model from a URL atomically.
+
+        Streamlit's caller renders synchronously, and any rerun during the
+        transfer would otherwise leave a half-written file at ``dest``
+        which llama.cpp later refuses to load. To stay safe:
+
+        1. Write to ``<dest>.partial`` instead of ``dest``.
+        2. After the transfer, verify the file size against the server's
+           Content-Length header (when the server advertises one).
+        3. Atomically ``rename`` to ``dest`` only if size matches.
+        4. On any failure, remove the partial file before propagating.
 
         Args:
             url: Direct download URL for the .gguf file.
@@ -829,22 +839,66 @@ class LlamaCppBackend(LLMBackend):
             progress_callback: Optional callable(bytes_downloaded, total_bytes).
 
         Returns:
-            The path where the model was saved.
+            The path where the model was saved (== ``dest``).
+
+        Raises:
+            IOError: when the downloaded size doesn't match Content-Length.
+            Whatever urllib raises on network errors — partial file is
+            cleaned up first so retrying is safe.
         """
+        import os
         import urllib.request
 
         if dest is None:
             filename = url.rsplit("/", 1)[-1]
             dest = str(Path.home() / ".spendifai" / "models" / filename)
-        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        dest_path = Path(dest)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        partial = dest_path.with_suffix(dest_path.suffix + ".partial")
 
-        if progress_callback is not None:
-            def _reporthook(block_num, block_size, total_size):
-                progress_callback(block_num * block_size, total_size)
-            urllib.request.urlretrieve(url, dest, reporthook=_reporthook)
-        else:
-            urllib.request.urlretrieve(url, dest)
-        return dest
+        # Best-effort cleanup of any stale partial from a previous attempt.
+        if partial.exists():
+            try:
+                partial.unlink()
+            except OSError:
+                pass
+
+        expected_size: int | None = None
+        try:
+            if progress_callback is not None:
+                def _reporthook(block_num, block_size, total_size):
+                    nonlocal expected_size
+                    if total_size and total_size > 0:
+                        expected_size = total_size
+                    progress_callback(block_num * block_size, total_size)
+                urllib.request.urlretrieve(url, str(partial), reporthook=_reporthook)
+            else:
+                urllib.request.urlretrieve(url, str(partial))
+
+            actual_size = partial.stat().st_size
+            if expected_size and actual_size != expected_size:
+                # Truncated transfer — refuse to surface a broken file.
+                try:
+                    partial.unlink()
+                except OSError:
+                    pass
+                raise IOError(
+                    f"Download incomplete: got {actual_size} bytes, expected "
+                    f"{expected_size}. The partial file has been removed; "
+                    "please retry."
+                )
+
+            # Atomic rename → either the new file is fully there or it isn't.
+            os.replace(str(partial), str(dest_path))
+            return str(dest_path)
+        except Exception:
+            # Any failure — make sure we don't leave a misleading partial.
+            try:
+                if partial.exists():
+                    partial.unlink()
+            except OSError:
+                pass
+            raise
 
     @staticmethod
     def list_local_models() -> list[dict]:
