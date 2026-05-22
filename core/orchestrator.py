@@ -208,6 +208,10 @@ class ImportResult:
     skipped_rows: list[SkippedRow] = field(default_factory=list)  # rows skipped during normalisation
     merged_count: int = 0             # intra-file duplicate rows merged
     internal_transfer_count: int = 0  # transactions detected as giroconti (always saved)
+    # Phase timings in milliseconds (AI-88). Keys: header_detection,
+    # classifying, footer_detection, extracting, cleaning, categorizing.
+    # Empty when a phase didn't run (e.g. Flow-1 cache hit skips classify).
+    phase_durations_ms: dict[str, int] = field(default_factory=dict)
 
 
 def _build_backend(config: ProcessingConfig) -> LLMBackend:
@@ -803,10 +807,42 @@ def process_file(
     Returns:
         ImportResult.
     """
+    # ── Phase timing (AI-88) ──────────────────────────────────────────────
+    # Piggyback on the `_progress(p, phase)` transitions to time each
+    # pipeline phase without adding manual `start`/`stop` calls all over
+    # the function. Closed phases accumulate into `_phase_durations_ms`,
+    # the open one tracks its start in `_phase_starts`. `_finalize_phase
+    # _timings()` is called before every early `return ImportResult(...)`
+    # so partial-flow results (Flow-2 schema review, normalization
+    # errors, etc.) still report the work they actually did.
+    import time as _phase_time
+    _phase_starts: dict[str, float] = {}
+    _phase_durations_ms: dict[str, int] = {}
+    _current_phase: list[str | None] = [None]
+
+    def _phase_close(name: str) -> None:
+        t0 = _phase_starts.pop(name, None)
+        if t0 is None:
+            return
+        elapsed_ms = int((_phase_time.monotonic() - t0) * 1000)
+        _phase_durations_ms[name] = _phase_durations_ms.get(name, 0) + elapsed_ms
+
+    def _finalize_phase_timings() -> None:
+        # Close whatever phase is still open at the moment of return.
+        if _current_phase[0] is not None:
+            _phase_close(_current_phase[0])
+            _current_phase[0] = None
+
     def _progress(p: float, phase: str | None = None):
         # phase is one of: header_detection, classifying, footer_detection,
         # extracting, cleaning, categorizing — the UI maps it to a localized
         # label via the `upload.phase.<key>` i18n entries.
+        if phase and phase != _current_phase[0]:
+            # Phase transition: close the previous, open the new.
+            if _current_phase[0] is not None:
+                _phase_close(_current_phase[0])
+            _phase_starts[phase] = _phase_time.monotonic()
+            _current_phase[0] = phase
         if progress_callback:
             clamped = max(0.0, min(1.0, p))
             try:
@@ -868,6 +904,7 @@ def process_file(
         )
 
     if df_raw.empty:
+        _finalize_phase_timings()
         return ImportResult(
             batch_sha256=batch_sha256,
             source_name=filename,
@@ -878,6 +915,7 @@ def process_file(
             errors=["Empty file or no data found"],
             total_file_rows=0,
             header_rows_skipped=_header_rows_skipped,
+            phase_durations_ms=_phase_durations_ms,
         )
 
     flow_used = "flow1"
@@ -971,6 +1009,7 @@ def process_file(
                 f"process_file: Flow 2 for {filename} — confidence_score={_score} < "
                 f"{config.confidence_threshold} → stopping for user schema review"
             )
+            _finalize_phase_timings()
             return ImportResult(
                 batch_sha256=batch_sha256,
                 source_name=filename,
@@ -984,6 +1023,7 @@ def process_file(
                 header_rows_skipped=_header_rows_skipped,
                 needs_schema_review=True,
                 available_columns=list(df_raw.columns),
+                phase_durations_ms=_phase_durations_ms,
             )
     else:
         _progress(0.10, "classifying")
@@ -1159,6 +1199,7 @@ def process_file(
                 "process_file: Flow 2 retry for %s failed — classify_document returned unusable schema",
                 filename,
             )
+            _finalize_phase_timings()
             return ImportResult(
                 batch_sha256=batch_sha256,
                 source_name=filename,
@@ -1172,6 +1213,7 @@ def process_file(
                 header_rows_skipped=_header_rows_skipped,
                 skipped_rows=_norm_skipped,
                 merged_count=_merge_count,
+                phase_durations_ms=_phase_durations_ms,
             )
 
     # Case 5: remove within-file card balance/totale summary row (double-counting guard)
@@ -1199,6 +1241,7 @@ def process_file(
             logger.info(f"process_file: balance/totale row {action} from {filename}")
 
     if not transactions:
+        _finalize_phase_timings()
         return ImportResult(
             batch_sha256=batch_sha256,
             source_name=filename,
@@ -1212,6 +1255,7 @@ def process_file(
             header_rows_skipped=_header_rows_skipped,
             skipped_rows=_norm_skipped,
             merged_count=_merge_count,
+            phase_durations_ms=_phase_durations_ms,
         )
 
     # ── Per-transaction dedup: filter already-imported rows BEFORE any LLM call ──
@@ -1230,6 +1274,7 @@ def process_file(
             )
         if not transactions:
             logger.info(f"process_file: all transactions already imported for {filename}, skipping")
+            _finalize_phase_timings()
             return ImportResult(
                 batch_sha256=batch_sha256,
                 source_name=filename,
@@ -1243,6 +1288,7 @@ def process_file(
                 header_rows_skipped=_header_rows_skipped,
                 skipped_rows=_norm_skipped,
                 merged_count=_merge_count,
+                phase_durations_ms=_phase_durations_ms,
             )
     _progress(0.35, "cleaning")
 
@@ -1406,6 +1452,7 @@ def process_file(
             f"applied only in views)"
         )
 
+    _finalize_phase_timings()
     return ImportResult(
         batch_sha256=batch_sha256,
         source_name=filename,
@@ -1420,6 +1467,7 @@ def process_file(
         skipped_rows=_norm_skipped,
         merged_count=_merge_count,
         internal_transfer_count=_giro_count,
+        phase_durations_ms=_phase_durations_ms,
     )
 
 

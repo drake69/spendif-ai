@@ -460,6 +460,16 @@ class ImportJob(Base):
     n_files = Column(Integer, default=0)
     started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime)
+    # ── Phase timing (AI-88) — milliseconds spent in each pipeline phase
+    # across all files of this job. Cumulative across the job's files
+    # (one job often imports several files in a row, the value is the
+    # sum). Null until at least one file is finalised.
+    ms_header_detection = Column(Integer)
+    ms_classifying      = Column(Integer)
+    ms_footer_detection = Column(Integer)
+    ms_extracting       = Column(Integer)
+    ms_cleaning         = Column(Integer)
+    ms_categorizing     = Column(Integer)
 
 
 class TaxonomyCategory(Base):
@@ -574,7 +584,10 @@ class NsiTagMapping(Base):
 
 
 def _migrate_add_import_job(engine) -> None:
-    """Create import_job table if not present (idempotent)."""
+    """Create import_job table if not present (idempotent) and add the
+    AI-88 ms_* phase-timing columns when missing.
+    """
+    from sqlalchemy import inspect as _inspect
     from sqlalchemy import text as _text
     with engine.connect() as conn:
         conn.execute(_text(
@@ -590,6 +603,24 @@ def _migrate_add_import_job(engine) -> None:
             'completed_at DATETIME)'
         ))
         conn.commit()
+
+    # Additive: add the AI-88 phase-timing columns to existing rows.
+    insp = _inspect(engine)
+    existing_cols = {c["name"] for c in insp.get_columns("import_job")}
+    phase_cols = (
+        "ms_header_detection",
+        "ms_classifying",
+        "ms_footer_detection",
+        "ms_extracting",
+        "ms_cleaning",
+        "ms_categorizing",
+    )
+    missing = [c for c in phase_cols if c not in existing_cols]
+    if missing:
+        with engine.connect() as conn:
+            for col in missing:
+                conn.execute(_text(f"ALTER TABLE import_job ADD COLUMN {col} INTEGER"))
+            conn.commit()
 
 
 def _migrate_add_taxonomy_default(engine) -> None:

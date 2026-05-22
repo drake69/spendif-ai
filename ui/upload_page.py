@@ -655,6 +655,15 @@ def render_upload_page(engine):
                             n_files=total_files,
                             time=datetime.now(timezone.utc).strftime('%H:%M:%S'))
 
+        # AI-88: accumulate per-phase wall-clock across all files of this
+        # job. Each ImportResult carries `phase_durations_ms` populated by
+        # orchestrator.process_file. Sum them so the job row reports the
+        # total time spent in each pipeline phase across the whole batch.
+        _phase_totals: dict[str, int] = {}
+        for r in results:
+            for phase, ms in (getattr(r, "phase_durations_ms", None) or {}).items():
+                _phase_totals[phase] = _phase_totals.get(phase, 0) + int(ms)
+
         import_svc.update_job(
             job_id,
             status="completed",
@@ -663,6 +672,12 @@ def render_upload_page(engine):
             detail_message=final_detail,
             n_transactions=n_tx,
             completed_at=datetime.now(timezone.utc),
+            ms_header_detection=_phase_totals.get("header_detection"),
+            ms_classifying     =_phase_totals.get("classifying"),
+            ms_footer_detection=_phase_totals.get("footer_detection"),
+            ms_extracting      =_phase_totals.get("extracting"),
+            ms_cleaning        =_phase_totals.get("cleaning"),
+            ms_categorizing    =_phase_totals.get("categorizing"),
         )
 
         st.session_state["llm_in_progress"] = False
