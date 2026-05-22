@@ -130,7 +130,7 @@ class ProcessingConfig:
     # Classifier mode: "auto" (detect from model size), "single" (1 LLM call), "multi_step" (3 calls)
     classifier_mode: str = "auto"
 
-    # Categorizer-specific backend (empty = same as classifier)
+    # Categorizer-specific backend (legacy — kept for backward compat).
     cat_llm_backend: str = ""
     cat_ollama_base_url: str = ""
     cat_ollama_model: str = ""
@@ -144,6 +144,41 @@ class ProcessingConfig:
     cat_llama_cpp_model_path: str = ""
     cat_llama_cpp_n_gpu_layers: int = -1
     cat_llama_cpp_n_ctx: int = 0
+    # ── 4-slot phase-specific backends (AI-90) ────────────────────────────
+    # See db/models.py DEFAULT_USER_SETTINGS for the design rationale.
+    # Empty values fall back to the main `llm_backend` configuration.
+    classifier_llm_backend: str = ""
+    classifier_llama_cpp_model_path: str = ""
+    classifier_llama_cpp_n_gpu_layers: int = -1
+    classifier_llama_cpp_n_ctx: int = 0
+    classifier_ollama_model: str = ""
+    classifier_openai_model: str = ""
+    classifier_anthropic_model: str = ""
+    classifier_compat_model: str = ""
+    cleaner_llm_backend: str = ""
+    cleaner_llama_cpp_model_path: str = ""
+    cleaner_llama_cpp_n_gpu_layers: int = -1
+    cleaner_llama_cpp_n_ctx: int = 0
+    cleaner_ollama_model: str = ""
+    cleaner_openai_model: str = ""
+    cleaner_anthropic_model: str = ""
+    cleaner_compat_model: str = ""
+    categorizer_llm_backend: str = ""
+    categorizer_llama_cpp_model_path: str = ""
+    categorizer_llama_cpp_n_gpu_layers: int = -1
+    categorizer_llama_cpp_n_ctx: int = 0
+    categorizer_ollama_model: str = ""
+    categorizer_openai_model: str = ""
+    categorizer_anthropic_model: str = ""
+    categorizer_compat_model: str = ""
+    footer_llm_backend: str = ""
+    footer_llama_cpp_model_path: str = ""
+    footer_llama_cpp_n_gpu_layers: int = -1
+    footer_llama_cpp_n_ctx: int = 0
+    footer_ollama_model: str = ""
+    footer_openai_model: str = ""
+    footer_anthropic_model: str = ""
+    footer_compat_model: str = ""
 
 
 @dataclass
@@ -220,40 +255,106 @@ def _get_fallback_backend(config: ProcessingConfig) -> Optional[OllamaBackend]:
 
 
 def _build_categorizer_backend(config: ProcessingConfig) -> Optional[LLMBackend]:
-    """Build a separate LLM backend for categorization, or None to reuse the classifier backend."""
-    if not config.cat_llm_backend:
+    """Backward-compat shim. New code should call ``_build_phase_backend(config, 'categorizer')``.
+
+    Returns None when neither the new `categorizer_llm_backend` nor the
+    legacy `cat_llm_backend` is set — caller is expected to fall back to
+    the main classifier backend in that case.
+    """
+    return _build_phase_backend(config, "categorizer")
+
+
+# Phases that can override the main LLM backend independently.
+PHASE_NAMES = ("classifier", "cleaner", "categorizer", "footer")
+
+
+def _build_phase_backend(config: ProcessingConfig, phase: str) -> Optional[LLMBackend]:
+    """Build a phase-specific LLM backend, or None if the phase isn't overridden.
+
+    A phase has its own backend iff the user set `<phase>_llm_backend` (new
+    4-slot API) — or, for the `categorizer` phase only, the legacy
+    `cat_llm_backend` field (kept transitional). Returns None otherwise so
+    the caller reuses the main backend instance.
+
+    Account-level credentials (API keys, base URLs for ollama/compat) are
+    always inherited from the main backend — they aren't duplicated per
+    phase because they describe the account, not the model.
+
+    AI-90: when this returns None we fall back to the main backend; when
+    it returns a backend the caller uses it for just that phase's LLM
+    calls (classifier / cleaner / categorizer / footer).
+    """
+    if phase not in PHASE_NAMES:
+        raise ValueError(f"Unknown phase: {phase!r}. Expected one of {PHASE_NAMES}.")
+
+    # Resolve the per-phase backend selector. For backward compatibility,
+    # the `categorizer` phase also honours the legacy `cat_*` keys.
+    phase_backend = getattr(config, f"{phase}_llm_backend", "") or ""
+    if not phase_backend and phase == "categorizer":
+        phase_backend = config.cat_llm_backend or ""
+    if not phase_backend:
         return None
+
     kwargs: dict[str, Any] = {"timeout": config.llm_timeout_s}
-    if config.cat_llm_backend == "local_ollama":
-        kwargs["base_url"] = config.cat_ollama_base_url or config.ollama_base_url
-        kwargs["model"] = config.cat_ollama_model or config.ollama_model
-    elif config.cat_llm_backend == "openai":
-        kwargs["model"] = config.cat_openai_model or config.openai_model
-        kwargs["api_key"] = config.cat_openai_api_key or config.openai_api_key
-    elif config.cat_llm_backend == "claude":
-        kwargs["model"] = config.cat_claude_model or config.claude_model
-        kwargs["api_key"] = config.cat_anthropic_api_key or config.anthropic_api_key
-    elif config.cat_llm_backend == "openai_compatible":
-        kwargs["base_url"] = config.cat_compat_base_url or config.compat_base_url
-        kwargs["api_key"] = config.cat_compat_api_key or config.compat_api_key
-        kwargs["model"] = config.cat_compat_model or config.compat_model
-    elif config.cat_llm_backend == "local_llama_cpp":
+
+    def _phase_or_main(attr: str, main_attr: str | None = None) -> str:
+        # Per-phase value if set, otherwise fall back to the main config value
+        # (or legacy `cat_*` value if we're handling the categorizer phase).
+        val = getattr(config, f"{phase}_{attr}", "") or ""
+        if not val and phase == "categorizer":
+            val = getattr(config, f"cat_{attr}", "") or ""
+        if not val and main_attr:
+            val = getattr(config, main_attr, "") or ""
+        return val
+
+    if phase_backend == "local_ollama":
+        # base_url is account-level → always inherited from main config.
+        kwargs["base_url"] = config.ollama_base_url
+        kwargs["model"] = _phase_or_main("ollama_model", "ollama_model")
+    elif phase_backend == "openai":
+        kwargs["model"] = _phase_or_main("openai_model", "openai_model")
+        kwargs["api_key"] = config.openai_api_key
+    elif phase_backend == "claude":
+        kwargs["model"] = _phase_or_main("anthropic_model", "claude_model")
+        kwargs["api_key"] = config.anthropic_api_key
+    elif phase_backend == "openai_compatible":
+        # base_url + api_key are account-level → inherited from main config.
+        kwargs["base_url"] = config.compat_base_url
+        kwargs["api_key"]  = config.compat_api_key
+        kwargs["model"]    = _phase_or_main("compat_model", "compat_model")
+    elif phase_backend == "local_llama_cpp":
         kwargs.pop("timeout", None)
-        path = config.cat_llama_cpp_model_path or config.llama_cpp_model_path
+        path = _phase_or_main("llama_cpp_model_path", "llama_cpp_model_path")
         if path:
             kwargs["model_path"] = path
-        kwargs["n_gpu_layers"] = config.cat_llama_cpp_n_gpu_layers if config.cat_llama_cpp_model_path else config.llama_cpp_n_gpu_layers
-        kwargs["n_ctx"] = config.cat_llama_cpp_n_ctx if config.cat_llama_cpp_model_path else config.llama_cpp_n_ctx
-    elif config.cat_llm_backend == "vllm":
+        # n_gpu_layers / n_ctx: phase-specific if set (≠ default), otherwise main.
+        phase_layers = getattr(config, f"{phase}_llama_cpp_n_gpu_layers", -1)
+        phase_ctx    = getattr(config, f"{phase}_llama_cpp_n_ctx", 0)
+        legacy_layers = config.cat_llama_cpp_n_gpu_layers if phase == "categorizer" else -1
+        legacy_ctx    = config.cat_llama_cpp_n_ctx if phase == "categorizer" else 0
+        legacy_path   = config.cat_llama_cpp_model_path if phase == "categorizer" else ""
+        # Use the phase-specific HW knobs only when the phase actually overrides
+        # the path; otherwise inherit from main so the user doesn't get
+        # silently inconsistent layers/ctx on a model they didn't override.
+        if getattr(config, f"{phase}_llama_cpp_model_path", ""):
+            kwargs["n_gpu_layers"] = phase_layers
+            kwargs["n_ctx"]        = phase_ctx
+        elif legacy_path:
+            kwargs["n_gpu_layers"] = legacy_layers
+            kwargs["n_ctx"]        = legacy_ctx
+        else:
+            kwargs["n_gpu_layers"] = config.llama_cpp_n_gpu_layers
+            kwargs["n_ctx"]        = config.llama_cpp_n_ctx
+    elif phase_backend == "vllm":
         kwargs["base_url"] = config.vllm_base_url
-        kwargs["model"] = config.vllm_model
-        kwargs["api_key"] = config.vllm_api_key
-    elif config.cat_llm_backend == "vllm_offline":
+        kwargs["model"]    = config.vllm_model
+        kwargs["api_key"]  = config.vllm_api_key
+    elif phase_backend == "vllm_offline":
         kwargs.pop("timeout", None)
         kwargs["model"] = config.vllm_offline_model
-        kwargs["tensor_parallel_size"] = config.vllm_offline_tensor_parallel
-        kwargs["gpu_memory_utilization"] = config.vllm_offline_gpu_memory_utilization
-    return BackendFactory.create(config.cat_llm_backend, **kwargs)
+        kwargs["tensor_parallel_size"]    = config.vllm_offline_tensor_parallel
+        kwargs["gpu_memory_utilization"]  = config.vllm_offline_gpu_memory_utilization
+    return BackendFactory.create(phase_backend, **kwargs)
 
 
 def load_raw_dataframe(
@@ -718,9 +819,25 @@ def process_file(
     logger.info(f"process_file: loading {filename} ({len(raw_bytes)} bytes)")
     backend = _build_backend(config)
     fallback = _get_fallback_backend(config)
-    cat_backend = _build_categorizer_backend(config) or backend
-    if cat_backend is not backend:
-        logger.info(f"process_file: using separate categorizer backend ({config.cat_llm_backend})")
+    # ── 4-slot phase backends (AI-90) ────────────────────────────────────
+    # Each phase falls back to the main `backend` when its override is empty.
+    # `cat_backend` is kept as an alias to preserve the public signature of
+    # the categorize_batch call site below.
+    classifier_backend = _build_phase_backend(config, "classifier") or backend
+    cleaner_backend    = _build_phase_backend(config, "cleaner")    or backend
+    cat_backend        = _build_phase_backend(config, "categorizer") or backend
+    footer_backend     = _build_phase_backend(config, "footer")     or backend
+    for phase_name, phase_backend in (
+        ("classifier", classifier_backend),
+        ("cleaner",    cleaner_backend),
+        ("categorizer", cat_backend),
+        ("footer",     footer_backend),
+    ):
+        if phase_backend is not backend:
+            logger.info(
+                f"process_file: using dedicated {phase_name} backend "
+                f"({getattr(config, f'{phase_name}_llm_backend', '') or 'cat_*'})"
+            )
 
     # Load raw data — load_raw_dataframe detects skip_rows + header internally
     _progress(0.0, "header_detection")
@@ -822,7 +939,7 @@ def process_file(
         logger.info(f"process_file: no known schema for {filename}, using Flow 2")
         doc_schema = classify_document(
             df_raw=df_raw,
-            llm_backend=backend,
+            llm_backend=classifier_backend,
             source_name=filename,
             sanitize=True,
             sanitize_config=config.sanitize_config,
@@ -915,7 +1032,7 @@ def process_file(
         if _unmatched and backend is not None:
             try:
                 df_raw, _new_pats, _p2 = strip_footer_phase2_llm(
-                    df_raw, doc_schema, backend,
+                    df_raw, doc_schema, footer_backend,
                     sanitize_config=config.sanitize_config,
                     source_name=filename,
                 )
@@ -944,7 +1061,7 @@ def process_file(
         if backend is not None:
             try:
                 df_raw, _new_pats, _p2 = strip_footer_phase2_llm(
-                    df_raw, doc_schema, backend,
+                    df_raw, doc_schema, footer_backend,
                     sanitize_config=config.sanitize_config,
                     source_name=filename,
                 )
@@ -1017,7 +1134,7 @@ def process_file(
         flow_used = "flow2_retry"
         doc_schema = classify_document(
             df_raw=df_raw,
-            llm_backend=backend,
+            llm_backend=classifier_backend,
             source_name=filename,
             sanitize=True,
             sanitize_config=config.sanitize_config,
@@ -1144,15 +1261,12 @@ def process_file(
     # Owner names are replaced with fake but plausible aliases (e.g. "Carlo
     # Brambilla") so the LLM extracts them as real names; aliases are restored
     # to the real owner names after extraction.
-    # Cleaning and categorization share the same workload profile:
-    # large batched structured output on repetitive descriptions, run
-    # hundreds of times per file. Both benefit from the smaller dedicated
-    # model when the user configures `cat_llm_backend`. Falls back to the
-    # main backend otherwise (cat_backend == backend in that case — see
-    # the `or backend` above).
+    # AI-90: cleaner has its own backend slot. Falls back to the main
+    # `backend` when `cleaner_llm_backend` is empty (handled by the
+    # `or backend` initialiser above).
     transactions = clean_descriptions_batch(
         transactions,
-        llm_backend=cat_backend,
+        llm_backend=cleaner_backend,
         fallback_backend=fallback,
         source_name=filename,
         sanitize_config=config.sanitize_config,

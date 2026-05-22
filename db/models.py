@@ -79,7 +79,10 @@ DEFAULT_USER_SETTINGS = {
     "giroconto_mode": "neutral",
     "max_transaction_amount": "1000000",
     "force_schema_import": "false",  # I-04: skip schema review, always auto-import
-    # Categorizer-specific backend (empty = same as classifier)
+    # Categorizer-specific backend (legacy keys — `cat_*` is the old 2-slot
+    # API kept for backward compatibility. New code reads `categorizer_*`
+    # first and falls back to `cat_*` if empty. Will be removed once all
+    # users have migrated to the 4-slot model in `_config_from_settings`.)
     "cat_llm_backend": "",
     "cat_ollama_base_url": "",
     "cat_ollama_model": "",
@@ -93,6 +96,51 @@ DEFAULT_USER_SETTINGS = {
     "cat_llama_cpp_model_path": "",
     "cat_llama_cpp_n_gpu_layers": "-1",
     "cat_llama_cpp_n_ctx": "0",
+    # ── 4-slot phase-specific backends (AI-90) ────────────────────────────
+    # One backend per LLM prompt-family in the pipeline:
+    #   classifier   → core/classifier.py     (single-shot, structural reasoning)
+    #   cleaner      → core/description_cleaner.py (batched, NER-like)
+    #   categorizer  → core/categorizer.py    (batched, classification)
+    #   footer       → core/normalizer.py footer_detect (rare, structural)
+    # When a phase-specific key is empty the runtime falls back to the
+    # main `llm_backend` (and its parameters), so existing installs keep
+    # working with their current single-model setup until the user opts
+    # into per-phase specialisation via Settings.
+    # API keys (openai, anthropic, compat) and base URLs (ollama, compat)
+    # are NOT duplicated per phase — they are account-level and reused
+    # from the main backend automatically.
+    "classifier_llm_backend": "",
+    "classifier_llama_cpp_model_path": "",
+    "classifier_llama_cpp_n_gpu_layers": "-1",
+    "classifier_llama_cpp_n_ctx": "0",
+    "classifier_ollama_model": "",
+    "classifier_openai_model": "",
+    "classifier_anthropic_model": "",
+    "classifier_compat_model": "",
+    "cleaner_llm_backend": "",
+    "cleaner_llama_cpp_model_path": "",
+    "cleaner_llama_cpp_n_gpu_layers": "-1",
+    "cleaner_llama_cpp_n_ctx": "0",
+    "cleaner_ollama_model": "",
+    "cleaner_openai_model": "",
+    "cleaner_anthropic_model": "",
+    "cleaner_compat_model": "",
+    "categorizer_llm_backend": "",
+    "categorizer_llama_cpp_model_path": "",
+    "categorizer_llama_cpp_n_gpu_layers": "-1",
+    "categorizer_llama_cpp_n_ctx": "0",
+    "categorizer_ollama_model": "",
+    "categorizer_openai_model": "",
+    "categorizer_anthropic_model": "",
+    "categorizer_compat_model": "",
+    "footer_llm_backend": "",
+    "footer_llama_cpp_model_path": "",
+    "footer_llama_cpp_n_gpu_layers": "-1",
+    "footer_llama_cpp_n_ctx": "0",
+    "footer_ollama_model": "",
+    "footer_openai_model": "",
+    "footer_anthropic_model": "",
+    "footer_compat_model": "",
     # NOTE: onboarding_done is NOT in defaults — it's managed by
     # _migrate_set_onboarding_done_for_existing_users() and SettingsService.
 }
