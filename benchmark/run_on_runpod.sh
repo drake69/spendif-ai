@@ -40,6 +40,8 @@ RUNS="${RUNS:-1}"
 FILES="${FILES:-50}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_PUSH="${SKIP_PUSH:-0}"
+CLOUD_TYPE="${CLOUD_TYPE:-COMMUNITY}"
+DISK_GB="${DISK_GB:-15}"
 LOCAL_RESULTS_DIR="$(cd "$(dirname "$0")/.." && pwd)/benchmark/results"
 
 # ── Parse flags ──────────────────────────────────────────────────────────────
@@ -52,6 +54,8 @@ while [[ $# -gt 0 ]]; do
         --files)         FILES="$2";       shift 2 ;;
         --skip-build)    SKIP_BUILD=1;     shift ;;
         --skip-push)     SKIP_PUSH=1;      shift ;;
+        --cloud-type)    CLOUD_TYPE="$2";  shift 2 ;;
+        --disk-gb)       DISK_GB="$2";     shift 2 ;;
         --results-dir)   LOCAL_RESULTS_DIR="$2"; shift 2 ;;
         -h|--help)
             sed -n '/^# ─/,/^$/p' "$0" | sed 's/^# \?//'
@@ -124,8 +128,8 @@ POD_ID="$(runpodctl pod create \
     --image                "$IMAGE" \
     --gpu-id               "$GPU" \
     --gpu-count            1 \
-    --container-disk-in-gb 15 \
-    --cloud-type           COMMUNITY \
+    --container-disk-in-gb "$DISK_GB" \
+    --cloud-type           "$CLOUD_TYPE" \
     --docker-args          "--models $MODELS --runs $RUNS --files $FILES" \
     | python3 -c 'import sys,json; print(json.load(sys.stdin)["pod"]["id"])')"
 
