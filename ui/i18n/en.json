@@ -963,5 +963,11 @@
   "llm_models.download.done": "✓ Saved to {path}",
   "llm_models.download.error": "✗ Download failed: {error}",
   "llm_models.download.all_present": "All catalog models are already installed.",
-  "llm_models.download.installed_label": "Installed local models"
+  "llm_models.download.installed_label": "Installed local models",
+  "llm_models.main.title": "🎯 Main backend",
+  "llm_models.main.caption": "Default model used by every pipeline phase. The cards below can override it per phase — users who want a single model everywhere only need to configure this section.",
+  "llm_models.main.backend": "Backend",
+  "llm_models.main.save": "Save main backend",
+  "llm_models.main.saved": "✓ Main backend saved",
+  "llm_models.main.test": "🧪 Test"
 }

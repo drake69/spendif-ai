@@ -963,5 +963,11 @@
   "llm_models.download.done": "✓ Gespeichert unter {path}",
   "llm_models.download.error": "✗ Download fehlgeschlagen: {error}",
   "llm_models.download.all_present": "Alle Katalogmodelle sind bereits installiert.",
-  "llm_models.download.installed_label": "Installierte lokale Modelle"
+  "llm_models.download.installed_label": "Installierte lokale Modelle",
+  "llm_models.main.title": "🎯 Haupt-Backend",
+  "llm_models.main.caption": "Standardmodell für alle Pipeline-Phasen. Die Karten unten können dies pro Phase überschreiben — wer ein einziges Modell überall möchte, konfiguriert nur hier.",
+  "llm_models.main.backend": "Backend",
+  "llm_models.main.save": "Haupt-Backend speichern",
+  "llm_models.main.saved": "✓ Haupt-Backend gespeichert",
+  "llm_models.main.test": "🧪 Test"
 }

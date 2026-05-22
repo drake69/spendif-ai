@@ -963,5 +963,11 @@
   "llm_models.download.done": "✓ Scaricato in {path}",
   "llm_models.download.error": "✗ Download fallito: {error}",
   "llm_models.download.all_present": "Tutti i modelli del catalogo sono già installati.",
-  "llm_models.download.installed_label": "Modelli locali installati"
+  "llm_models.download.installed_label": "Modelli locali installati",
+  "llm_models.main.title": "🎯 Backend principale",
+  "llm_models.main.caption": "Modello usato di default per tutte le fasi della pipeline. Le card sotto possono sovrascriverlo per ogni fase singolarmente — chi vuole un solo modello dappertutto configura solo qui.",
+  "llm_models.main.backend": "Backend",
+  "llm_models.main.save": "Salva backend principale",
+  "llm_models.main.saved": "✓ Backend principale salvato",
+  "llm_models.main.test": "🧪 Test"
 }

@@ -963,5 +963,11 @@
   "llm_models.download.done": "✓ Enregistré dans {path}",
   "llm_models.download.error": "✗ Échec du téléchargement : {error}",
   "llm_models.download.all_present": "Tous les modèles du catalogue sont déjà installés.",
-  "llm_models.download.installed_label": "Modèles locaux installés"
+  "llm_models.download.installed_label": "Modèles locaux installés",
+  "llm_models.main.title": "🎯 Backend principal",
+  "llm_models.main.caption": "Modèle utilisé par défaut pour toutes les phases du pipeline. Les cartes ci-dessous peuvent le remplacer par phase — pour un modèle unique partout, ne configurez que cette section.",
+  "llm_models.main.backend": "Backend",
+  "llm_models.main.save": "Enregistrer le backend principal",
+  "llm_models.main.saved": "✓ Backend principal enregistré",
+  "llm_models.main.test": "🧪 Tester"
 }

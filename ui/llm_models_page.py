@@ -79,6 +79,157 @@ def _render_current_status(settings: dict) -> None:
     st.markdown("\n".join(rows))
 
 
+def _render_main_backend(svc: SettingsService, settings: dict) -> None:
+    """The main backend acts as the fallback for every phase that doesn't
+    override it. Configuring this is the FIRST thing a user does — the
+    four phase cards below default to inheriting from it.
+    """
+    st.subheader(t("llm_models.main.title"))
+    st.caption(t("llm_models.main.caption"))
+
+    current = settings.get("llm_backend", "local_llama_cpp")
+    idx = _SUPPORTED_BACKENDS.index(current) if current in _SUPPORTED_BACKENDS else 0
+    sel = st.selectbox(
+        t("llm_models.main.backend"),
+        options=_SUPPORTED_BACKENDS,
+        format_func=_backend_label,
+        index=idx,
+        key="_llmpage_main_backend",
+    )
+
+    new_vals: dict[str, str] = {"llm_backend": sel}
+
+    if sel == "local_llama_cpp":
+        new_vals["llama_cpp_model_path"] = st.text_input(
+            t("llm_models.phase.local_llama_cpp.model_path"),
+            value=settings.get("llama_cpp_model_path", ""),
+            placeholder=t("llm_models.phase.local_llama_cpp.model_path_placeholder"),
+            key="_llmpage_main_lcpp_path",
+        )
+        with st.expander(t("llm_models.phase.advanced"), expanded=False):
+            new_vals["llama_cpp_n_gpu_layers"] = str(st.number_input(
+                t("llm_models.phase.local_llama_cpp.n_gpu_layers"),
+                value=int(settings.get("llama_cpp_n_gpu_layers", "-1") or "-1"),
+                min_value=-1, max_value=999, step=1,
+                key="_llmpage_main_lcpp_layers",
+            ))
+            new_vals["llama_cpp_n_ctx"] = str(st.number_input(
+                t("llm_models.phase.local_llama_cpp.n_ctx"),
+                value=int(settings.get("llama_cpp_n_ctx", "0") or "0"),
+                min_value=0, max_value=131072, step=1024,
+                help=t("llm_models.phase.local_llama_cpp.n_ctx_help"),
+                key="_llmpage_main_lcpp_ctx",
+            ))
+    elif sel == "local_ollama":
+        new_vals["ollama_model"] = st.text_input(
+            t("llm_models.phase.local_ollama.model"),
+            value=settings.get("ollama_model", ""),
+            placeholder="gemma3:12b",
+            key="_llmpage_main_ollama_model",
+        )
+    elif sel == "openai":
+        new_vals["openai_model"] = st.text_input(
+            t("llm_models.phase.openai.model"),
+            value=settings.get("openai_model", ""),
+            placeholder="gpt-4o-mini",
+            key="_llmpage_main_openai_model",
+        )
+    elif sel == "claude":
+        new_vals["anthropic_model"] = st.text_input(
+            t("llm_models.phase.claude.model"),
+            value=settings.get("anthropic_model", ""),
+            placeholder="claude-haiku-4-5-20251001",
+            key="_llmpage_main_anthropic_model",
+        )
+    elif sel == "openai_compatible":
+        new_vals["compat_model"] = st.text_input(
+            t("llm_models.phase.compat.model"),
+            value=settings.get("compat_model", ""),
+            placeholder=t("llm_models.phase.compat.model_placeholder"),
+            key="_llmpage_main_compat_model",
+        )
+    elif sel in ("vllm", "vllm_offline"):
+        st.caption(t("llm_models.phase.vllm.note"))
+
+    # Privacy banner for hosted backends.
+    if sel in ("openai", "claude", "openai_compatible"):
+        st.warning(t("llm_models.phase.hosted_privacy_warning"))
+
+    col_save, col_test = st.columns(2)
+    with col_save:
+        if st.button(
+            t("llm_models.main.save"),
+            key="_llmpage_main_save",
+            type="primary",
+            width="stretch",
+        ):
+            svc.set_bulk(new_vals)
+            # Invalidate caches that depend on the main backend.
+            st.session_state["llm_backend"] = sel
+            st.session_state.pop("chatbot", None)
+            st.success(t("llm_models.main.saved"))
+            logger.info(f"llm_models_page: main backend saved — {sel!r}")
+            st.rerun()
+    with col_test:
+        if st.button(
+            t("llm_models.main.test"),
+            key="_llmpage_main_test",
+            help=t("llm_models.phase.test_help"),
+            width="stretch",
+        ):
+            # Reuse the per-phase tester, faking a "main" phase name so
+            # `_run_phase_test` resolves model fields with phase-prefix
+            # fallback — but here there's no phase prefix; pass the values
+            # directly in a fake new_vals dict keyed by 'main_...'.
+            _run_main_test(new_vals, settings)
+
+
+def _run_main_test(new_vals: dict, settings: dict) -> None:
+    from services.llm_service import test_llm_backend
+
+    backend = new_vals.get("llm_backend", "")
+    if not backend:
+        st.warning(t("llm_models.phase.test_no_backend"))
+        return
+
+    kwargs: dict = {"backend": backend}
+    if backend == "local_llama_cpp":
+        kwargs["model_path"] = new_vals.get("llama_cpp_model_path", "") or settings.get("llama_cpp_model_path", "")
+        try:
+            kwargs["n_gpu_layers"] = int(new_vals.get("llama_cpp_n_gpu_layers", "-1") or "-1")
+            kwargs["n_ctx"] = int(new_vals.get("llama_cpp_n_ctx", "0") or "0")
+        except (TypeError, ValueError):
+            pass
+    elif backend == "local_ollama":
+        kwargs["base_url"] = settings.get("ollama_base_url", "http://localhost:11434")
+        kwargs["model"] = new_vals.get("ollama_model", "") or settings.get("ollama_model", "")
+    elif backend == "openai":
+        kwargs["api_key"] = settings.get("openai_api_key", "")
+        kwargs["model"] = new_vals.get("openai_model", "") or settings.get("openai_model", "")
+    elif backend == "claude":
+        kwargs["api_key"] = settings.get("anthropic_api_key", "")
+        kwargs["model"] = new_vals.get("anthropic_model", "") or settings.get("anthropic_model", "")
+    elif backend == "openai_compatible":
+        kwargs["base_url"] = settings.get("compat_base_url", "")
+        kwargs["api_key"] = settings.get("compat_api_key", "")
+        kwargs["model"] = new_vals.get("compat_model", "") or settings.get("compat_model", "")
+    elif backend in ("vllm", "vllm_offline"):
+        kwargs["base_url"] = settings.get("vllm_base_url", "")
+        kwargs["model"] = settings.get("vllm_model", "")
+        kwargs["api_key"] = settings.get("vllm_api_key", "") or "none"
+
+    import time as _time
+    with st.spinner(t("llm_models.phase.test_running")):
+        _t0 = _time.monotonic()
+        ok, msg = test_llm_backend(**kwargs)
+        elapsed = _time.monotonic() - _t0
+    if ok:
+        st.success(t("llm_models.phase.test_ok", elapsed=f"{elapsed:.1f}"))
+    else:
+        st.error(t("llm_models.phase.test_fail", error=msg[:200]))
+    logger.info(f"llm_models_page: main backend test ok={ok} elapsed={elapsed:.2f}s")
+
+
 def _render_account_credentials(svc: SettingsService, settings: dict) -> None:
     st.subheader(t("llm_models.credentials.title"))
     st.caption(t("llm_models.credentials.caption"))
@@ -302,6 +453,12 @@ def render_llm_models_page(engine) -> None:
     settings = svc.get_all()
 
     _render_current_status(settings)
+    st.divider()
+    # Main backend first — it's the fallback for every phase that doesn't
+    # explicitly override. Configuring it is the entry point for users
+    # who just want one model everywhere; phase-specific overrides below
+    # are for the power-user case.
+    _render_main_backend(svc, settings)
     st.divider()
     _render_account_credentials(svc, settings)
     st.divider()
