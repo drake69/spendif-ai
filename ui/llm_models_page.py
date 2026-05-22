@@ -73,9 +73,16 @@ def _model_picker(
     if backend == "local_llama_cpp":
         from services.llm_service import list_local_llama_cpp_models
         models = list_local_llama_cpp_models() or []
-        # Each entry is {"name": stem, "path": full_path, "size_mb": ...}
+        # Each entry is {"name": stem, "path": full_path, "size_gb": ...}
         options_paths = [m["path"] for m in models]
-        labels = {m["path"]: f"{m['name']} ({m.get('size_mb', '?')} MB)" for m in models}
+        labels = {
+            m["path"]: (
+                f"{m['name']} ({m['size_gb']} GB)"
+                if isinstance(m.get("size_gb"), (int, float))
+                else m["name"]
+            )
+            for m in models
+        }
         return _selectbox_or_custom(
             options=options_paths,
             current=current_value,
@@ -729,8 +736,12 @@ def _render_download() -> None:
         if local:
             with st.expander(t("llm_models.download.installed_label"), expanded=False):
                 for item in local:
-                    size_mb = item.get("size_mb")
-                    size_label = f"{size_mb:.0f} MB" if isinstance(size_mb, (int, float)) else ""
+                    size_gb = item.get("size_gb")
+                    size_label = (
+                        f"({size_gb} GB)"
+                        if isinstance(size_gb, (int, float))
+                        else ""
+                    )
                     st.markdown(f"- `{item['name']}` {size_label}")
         return
 

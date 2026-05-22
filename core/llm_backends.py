@@ -711,6 +711,11 @@ DEFAULT_GGUF_MODELS = {
         "size_gb": 1.9,
         "description": "Qwen 2.5 3B — ottimo per cleaner (NER batched, veloce, ~50 tok/s su Apple Silicon)",
     },
+    "Qwen2.5-7B-Instruct-Q4_K_M": {
+        "url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        "size_gb": 4.7,
+        "description": "Qwen 2.5 7B — Transformer puro, supportato da llama.cpp 0.3.x. Categorizer 17.8% exact (n=9). Alternative al 9B per chi non puo' usare l'architettura ibrida.",
+    },
     "Qwen3.5-2B-Q4_K_M": {
         "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
         "size_gb": 1.7,
