@@ -5,8 +5,42 @@ never from core.llm_backends or core.model_manager directly.
 """
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+@dataclass(frozen=True)
+class LLMTestResult:
+    """Result of a backend test. `severity='warning'` signals a recoverable
+    failure with a known fix in `hint_command`."""
+    ok: bool
+    message: str
+    severity: str = "error"      # "error" | "warning"
+    hint_command: str | None = None
+
+
+# Recoverable failure patterns: (regex on exception text, hint command).
+# When matched, the UI shows a warning + actionable suggestion instead of an error.
+_RECOVERABLE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Qwen 3.5 / future SSM-hybrid models — wheel PyPI corrente non li carica.
+    (re.compile(r"missing tensor 'blk\.\d+\.ssm_", re.IGNORECASE),
+     "bash scripts/setup_ssm_build.sh"),
+    (re.compile(r"unknown model architecture:\s*['\"]?qwen3", re.IGNORECASE),
+     "bash scripts/setup_ssm_build.sh"),
+    # Gemma 4 — basta aggiornare la wheel PyPI standard.
+    (re.compile(r"unknown model architecture:\s*['\"]?gemma4", re.IGNORECASE),
+     "uv pip install --upgrade llama-cpp-python"),
+)
+
+
+def _classify_exception(exc_text: str) -> tuple[str, str | None]:
+    """Map an exception message to (severity, hint_command)."""
+    for pattern, hint in _RECOVERABLE_PATTERNS:
+        if pattern.search(exc_text):
+            return "warning", hint
+    return "error", None
 
 
 # ── Context-length detection ─────────────────────────────────────────────────
@@ -48,8 +82,13 @@ def test_llm_backend(
     api_key: str = "",
     model: str = "",
     **extra_kwargs: Any,
-) -> tuple[bool, str]:
-    """Send a minimal test prompt. Returns (success, message)."""
+) -> LLMTestResult:
+    """Send a minimal test prompt.
+
+    Returns an `LLMTestResult` with severity='warning' (+ hint_command) when
+    the failure matches a known recoverable pattern (e.g. SSM-architecture
+    model on a llama-cpp-python wheel that doesn't support it).
+    """
     from core.llm_backends import BackendFactory, LLMValidationError
 
     try:
@@ -77,11 +116,13 @@ def test_llm_backend(
             user_prompt="Reply with exactly: OK",
             json_schema={"type": "object", "properties": {"reply": {"type": "string"}}},
         )
-        return True, str(resp)
+        return LLMTestResult(ok=True, message=str(resp))
     except LLMValidationError as exc:
-        return False, f"Validation: {exc}"
+        return LLMTestResult(ok=False, message=f"Validation: {exc}")
     except Exception as exc:
-        return False, str(exc)
+        text = str(exc)
+        severity, hint = _classify_exception(text)
+        return LLMTestResult(ok=False, message=text, severity=severity, hint_command=hint)
 
 
 # ── Local model listing ──────────────────────────────────────────────────────

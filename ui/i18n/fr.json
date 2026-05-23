@@ -941,6 +941,8 @@
   "llm_models.phase.test_running": "Test en cours…",
   "llm_models.phase.test_ok": "✓ Backend OK ({elapsed} s)",
   "llm_models.phase.test_fail": "✗ Échec du test : {error}",
+  "llm_models.phase.test_arch_unsupported": "⚠ Architecture du modèle non prise en charge par la build actuelle de llama-cpp-python : {error}",
+  "llm_models.phase.test_arch_hint": "Pour activer la prise en charge, exécutez dans un terminal :",
   "llm_models.stats.title": "📊 Statistiques d'utilisation (7 derniers jours)",
   "llm_models.stats.caption": "Agrégé par phase × modèle réellement utilisé. Se remplit après le premier import.",
   "llm_models.stats.empty": "Encore aucun appel LLM ces 7 derniers jours.",

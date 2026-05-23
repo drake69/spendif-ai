@@ -316,6 +316,19 @@ def _render_main_backend(svc: SettingsService, settings: dict) -> None:
             _run_main_test(new_vals, settings)
 
 
+def _render_test_result(result, elapsed: float) -> None:
+    """Render an LLMTestResult inline: success / warning + hint / error."""
+    if result.ok:
+        st.success(t("llm_models.phase.test_ok", elapsed=f"{elapsed:.1f}"))
+        return
+    if result.severity == "warning" and result.hint_command:
+        st.warning(t("llm_models.phase.test_arch_unsupported", error=result.message[:200]))
+        st.caption(t("llm_models.phase.test_arch_hint"))
+        st.code(result.hint_command, language="bash")
+        return
+    st.error(t("llm_models.phase.test_fail", error=result.message[:200]))
+
+
 def _run_main_test(new_vals: dict, settings: dict) -> None:
     from services.llm_service import test_llm_backend
 
@@ -353,13 +366,10 @@ def _run_main_test(new_vals: dict, settings: dict) -> None:
     import time as _time
     with st.spinner(t("llm_models.phase.test_running")):
         _t0 = _time.monotonic()
-        ok, msg = test_llm_backend(**kwargs)
+        result = test_llm_backend(**kwargs)
         elapsed = _time.monotonic() - _t0
-    if ok:
-        st.success(t("llm_models.phase.test_ok", elapsed=f"{elapsed:.1f}"))
-    else:
-        st.error(t("llm_models.phase.test_fail", error=msg[:200]))
-    logger.info(f"llm_models_page: main backend test ok={ok} elapsed={elapsed:.2f}s")
+    _render_test_result(result, elapsed)
+    logger.info(f"llm_models_page: main backend test ok={result.ok} severity={result.severity} elapsed={elapsed:.2f}s")
 
 
 def _render_account_credentials(svc: SettingsService, settings: dict) -> None:
@@ -453,13 +463,10 @@ def _run_phase_test(phase: str, new_vals: dict, settings: dict) -> None:
     with st.spinner(t("llm_models.phase.test_running")):
         import time as _time
         _t0 = _time.monotonic()
-        ok, msg = test_llm_backend(**kwargs)
+        result = test_llm_backend(**kwargs)
         elapsed = _time.monotonic() - _t0
-    if ok:
-        st.success(t("llm_models.phase.test_ok", elapsed=f"{elapsed:.1f}"))
-    else:
-        st.error(t("llm_models.phase.test_fail", error=msg[:200]))
-    logger.info(f"llm_models_page: phase {phase} test backend={backend} ok={ok} elapsed={elapsed:.2f}s")
+    _render_test_result(result, elapsed)
+    logger.info(f"llm_models_page: phase {phase} test backend={backend} ok={result.ok} severity={result.severity} elapsed={elapsed:.2f}s")
 
 
 def _render_phase_card(svc: SettingsService, settings: dict, phase: str, icon: str) -> None:

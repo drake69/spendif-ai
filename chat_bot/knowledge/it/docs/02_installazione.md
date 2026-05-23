@@ -121,6 +121,8 @@ uv run huggingface-cli download Qwen/Qwen2.5-3B-Instruct-GGUF qwen2.5-3b-instruc
 
 > **Gemma 4 E2B:** richiede `llama-cpp-python` aggiornato. Se ottieni `unknown model architecture: 'gemma4'`, esegui: `uv pip install --upgrade llama-cpp-python`.
 
+> **Qwen 3.5 (architettura ibrida SSM):** la wheel PyPI standard non basta — serve una build da source. Se ottieni `missing tensor 'blk.X.ssm_conv1d.weight'` o `unknown model architecture: 'qwen3'`, lancia: `bash scripts/setup_ssm_build.sh`. Lo script rileva il backend GPU, compila e aggiunge la libreria a `benchmark/.custom_packages` per preservare la build dai sync futuri.
+
 ### Step 6 — Avvia l'app
 
 ```bash
