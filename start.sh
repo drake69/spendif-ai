@@ -73,6 +73,16 @@ export PATH="$VENV_DIR/bin:$PATH"
 export VIRTUAL_ENV="$VENV_DIR"
 info "Virtualenv attivato ($VENV_DIR)"
 
+# ── Cleanup orphan Spendify processes ───────────
+# Match processi streamlit/uvicorn che contengono il path di questo progetto:
+# kill solo i nostri orfani, mai Sestante o altre app Python sulla stessa macchina.
+ORPHAN_PIDS=$(pgrep -f "$SCRIPT_DIR.*(streamlit|uvicorn)" 2>/dev/null | grep -v "^$$\$" || true)
+if [ -n "$ORPHAN_PIDS" ]; then
+    warn "Processi Spendify orfani trovati: $(echo "$ORPHAN_PIDS" | tr '\n' ' ') — termino"
+    echo "$ORPHAN_PIDS" | xargs kill -9 2>/dev/null || true
+    sleep 1
+fi
+
 # ── Avvio ───────────────────────────────────────
 
 MODE="${1:-ui}"
