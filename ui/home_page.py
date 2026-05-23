@@ -292,11 +292,22 @@ def _build_sankey_data(df: pd.DataFrame) -> Optional[dict]:
 def _render_sankey(data: dict) -> None:
     import plotly.graph_objects as go
 
+    # AI-118: dynamic height + larger pad to keep small branches readable.
+    # Plotly Sankey sizes branches proportionally to value, so tiny categories
+    # become unreadable. We can't enforce a true min-height, but giving the
+    # chart more vertical space + node padding makes the labels survive.
+    # The densest column drives the layout: roughly len(nodes)//3 (income,
+    # expense_cat, expense_subcat). Each node wants ~22 px of breathing room.
+    n_nodes = len(data["nodes"])
+    densest_col = max(1, n_nodes // 3)
+    chart_height = max(600, min(1400, densest_col * 22))
+
     fig = go.Figure(
         go.Sankey(
+            arrangement="perpendicular",
             node=dict(
                 label=data["nodes"],
-                pad=14, thickness=18,
+                pad=22, thickness=18,
             ),
             link=dict(
                 source=data["link_source"],
@@ -307,7 +318,7 @@ def _render_sankey(data: dict) -> None:
     )
     fig.update_layout(
         title=_t("home.charts.sankey_title"),
-        height=520,
+        height=chart_height,
         margin=dict(l=10, r=10, t=60, b=10),
     )
     st.plotly_chart(fig, use_container_width=True)
