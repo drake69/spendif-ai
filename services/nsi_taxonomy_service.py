@@ -215,11 +215,11 @@ class NsiTaxonomyService:
     ) -> dict[str, tuple[str, str]]:
         """Single LLM call: map all OSM tags to (category, subcategory) pairs.
 
-        OSM POI tags identify physical merchants → the domain is always
-        expense-only. We only pass the expense taxonomy to the LLM.
-        Sezione income omessa apposta: nessun tag OSM le corrisponde e la
-        sua presenza confondeva il modello (header "Spese"/"Entrate"
-        venivano scelti come category al posto del nome reale).
+        OSM POI tags identify physical merchants, so the domain is always
+        expense-only. The income half of the taxonomy is intentionally
+        omitted: no OSM tag matches it, and its presence used to confuse
+        the model into picking the "Spese" / "Entrate" section headers
+        as category names rather than the real category labels.
         """
         taxonomy_text = "\n".join(
             f"- {cat} → [{', '.join(subs)}]"
