@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────
 # Spendif.ai — Startup script (macOS / Linux)
+# Conforme a SW_ENGINEERING_BLUEPRINT.md §16.
 # ──────────────────────────────────────────────
 set -euo pipefail
 
@@ -15,6 +16,58 @@ NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
+
+# ── App paths (assoluti = chiave univoca per pgrep, §16.6.1) ───────────────
+APP_PATH_UI="$SCRIPT_DIR/app.py"
+APP_PATH_API="$SCRIPT_DIR/api/main.py"
+
+UI_PORT_BASE=8501
+UI_PORT_MAX=8510
+API_PORT_BASE=8000
+API_PORT_MAX=8010
+
+# ── Multi-instance management (§16.6) ──────────────────────────────────────
+kill_previous_instance() {
+    local pattern="$1"
+    local label="${2:-istanza}"
+    local pids
+    pids=$(pgrep -f "$pattern" 2>/dev/null || true)
+    [ -z "$pids" ] && return 0
+    for pid in $pids; do
+        if [ "$pid" = "$$" ] || [ "$pid" = "$PPID" ]; then
+            continue
+        fi
+        warn "Killing previous $label (PID $pid)..."
+        kill -TERM "$pid" 2>/dev/null || true
+        for _ in 1 2 3 4 5; do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.5
+        done
+        kill -KILL "$pid" 2>/dev/null || true
+    done
+    return 0
+}
+
+find_free_port() {
+    local base="$1"
+    local max="$2"
+    local port
+    for port in $(seq "$base" "$max"); do
+        if ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+            echo "$port"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# ── stop mode — bypass del pre-flight (§16.6.4) ────────────────────────────
+if [ "${1:-}" = "stop" ]; then
+    kill_previous_instance "$APP_PATH_UI"  "UI"
+    kill_previous_instance "$APP_PATH_API" "API"
+    info "Stopped (or nothing to stop)."
+    exit 0
+fi
 
 # ── Pre-flight checks ──────────────────────────
 
@@ -60,9 +113,12 @@ if [ ! -f .env ]; then
     fi
 fi
 
-# Dipendenze
+# Dipendenze (protegge build custom — vedi scripts/_lib/protect_custom.sh, §16.4.1)
 info "Sincronizzazione dipendenze..."
-uv sync --quiet
+SAFE_SYNC_MODE=non-interactive
+# shellcheck source=scripts/_lib/protect_custom.sh
+source "$SCRIPT_DIR/scripts/_lib/protect_custom.sh"
+safe_sync_run
 
 # Attivazione virtualenv
 VENV_DIR="$SCRIPT_DIR/.venv"
@@ -73,43 +129,50 @@ export PATH="$VENV_DIR/bin:$PATH"
 export VIRTUAL_ENV="$VENV_DIR"
 info "Virtualenv attivato ($VENV_DIR)"
 
-# ── Cleanup orphan Spendify processes ───────────
-# Match processi streamlit/uvicorn che contengono il path di questo progetto:
-# kill solo i nostri orfani, mai Sestante o altre app Python sulla stessa macchina.
-ORPHAN_PIDS=$(pgrep -f "$SCRIPT_DIR.*(streamlit|uvicorn)" 2>/dev/null | grep -v "^$$\$" || true)
-if [ -n "$ORPHAN_PIDS" ]; then
-    warn "Processi Spendify orfani trovati: $(echo "$ORPHAN_PIDS" | tr '\n' ' ') — termino"
-    echo "$ORPHAN_PIDS" | xargs kill -9 2>/dev/null || true
-    sleep 1
-fi
-
 # ── Avvio ───────────────────────────────────────
 
 MODE="${1:-ui}"
 
 case "$MODE" in
     ui)
-        info "Avvio Streamlit UI su http://localhost:8501"
-        exec "$VENV_DIR/bin/streamlit" run app.py --server.headless true
+        kill_previous_instance "$APP_PATH_UI" "UI"
+        UI_PORT=$(find_free_port "$UI_PORT_BASE" "$UI_PORT_MAX") \
+            || error "Nessuna porta libera in range $UI_PORT_BASE-$UI_PORT_MAX"
+        [ "$UI_PORT" != "$UI_PORT_BASE" ] && warn "Porta $UI_PORT_BASE occupata (non nostra) — uso $UI_PORT"
+        info "Avvio Streamlit UI su http://localhost:$UI_PORT"
+        exec "$VENV_DIR/bin/streamlit" run "$APP_PATH_UI" --server.headless true --server.port "$UI_PORT"
         ;;
     api)
-        info "Avvio API server su http://localhost:8000"
-        exec "$VENV_DIR/bin/uvicorn" api.main:app --host 0.0.0.0 --port 8000
+        kill_previous_instance "$APP_PATH_API" "API"
+        API_PORT=$(find_free_port "$API_PORT_BASE" "$API_PORT_MAX") \
+            || error "Nessuna porta libera in range $API_PORT_BASE-$API_PORT_MAX"
+        [ "$API_PORT" != "$API_PORT_BASE" ] && warn "Porta $API_PORT_BASE occupata (non nostra) — uso $API_PORT"
+        info "Avvio API server su http://localhost:$API_PORT"
+        exec "$VENV_DIR/bin/uvicorn" api.main:app --host 0.0.0.0 --port "$API_PORT"
         ;;
     all)
+        kill_previous_instance "$APP_PATH_UI"  "UI"
+        kill_previous_instance "$APP_PATH_API" "API"
+        UI_PORT=$(find_free_port "$UI_PORT_BASE" "$UI_PORT_MAX") \
+            || error "Nessuna porta libera in range $UI_PORT_BASE-$UI_PORT_MAX"
+        API_PORT=$(find_free_port "$API_PORT_BASE" "$API_PORT_MAX") \
+            || error "Nessuna porta libera in range $API_PORT_BASE-$API_PORT_MAX"
+        [ "$UI_PORT"  != "$UI_PORT_BASE"  ] && warn "Porta $UI_PORT_BASE occupata — uso $UI_PORT per UI"
+        [ "$API_PORT" != "$API_PORT_BASE" ] && warn "Porta $API_PORT_BASE occupata — uso $API_PORT per API"
         info "Avvio UI + API..."
-        "$VENV_DIR/bin/uvicorn" api.main:app --host 0.0.0.0 --port 8000 &
+        "$VENV_DIR/bin/uvicorn" api.main:app --host 0.0.0.0 --port "$API_PORT" &
         API_PID=$!
         trap "kill $API_PID 2>/dev/null" EXIT
-        info "API avviata (PID $API_PID) su http://localhost:8000"
-        info "Avvio Streamlit UI su http://localhost:8501"
-        "$VENV_DIR/bin/streamlit" run app.py --server.headless true
+        info "API avviata (PID $API_PID) su http://localhost:$API_PORT"
+        info "Avvio Streamlit UI su http://localhost:$UI_PORT"
+        "$VENV_DIR/bin/streamlit" run "$APP_PATH_UI" --server.headless true --server.port "$UI_PORT"
         ;;
     *)
-        echo "Uso: $0 [ui|api|all]"
-        echo "  ui   — Solo interfaccia Streamlit (default)"
-        echo "  api  — Solo server API REST"
-        echo "  all  — Entrambi"
+        echo "Uso: $0 [ui|api|all|stop]"
+        echo "  ui    — Solo interfaccia Streamlit (default)"
+        echo "  api   — Solo server API REST"
+        echo "  all   — Entrambi"
+        echo "  stop  — Termina istanze precedenti (UI + API) ed esce"
         exit 1
         ;;
 esac

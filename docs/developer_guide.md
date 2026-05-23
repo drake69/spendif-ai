@@ -658,16 +658,25 @@ Lo script `benchmark_stats.py --by-host` usa automaticamente i nomi amichevoli.
 
 ### Protezione librerie compilate custom
 
-Quando si compila manualmente una libreria GPU-specific (es. `llama-cpp-python` con Vulkan o ROCm), `uv sync` potrebbe sovrascriverla con la versione PyPI (CPU-only). Il benchmark ha un meccanismo di protezione a tre livelli:
+Quando si compila manualmente una libreria GPU-specific (es. `llama-cpp-python` con Vulkan/ROCm o con supporto SSM per Qwen 3.5), `uv sync` può sovrascriverla con la versione PyPI standard. La protezione è centralizzata in `scripts/_lib/protect_custom.sh` e condivisa da tre punti di entrata.
 
-1. **Gate automatico**: prima del sync, lo script fa un dry-run. Se `uv sync` toccherebbe una libreria custom elencata in `benchmark/.custom_packages`, chiede conferma interattiva (`Proceed? [y/N]`). Se l'utente rifiuta, il sync viene saltato.
+**Comando canonico per sincronizzare le dipendenze (sempre, anche se non hai build custom):**
 
-2. **Backup/restore con confronto versioni**: se il sync procede, le librerie custom vengono backuppate. Dopo il sync:
-   - Se uv ha **rimosso** la libreria → ripristina il backup
-   - Se uv ha **downgradato** (versione minore) → ripristina il backup (build custom vince)
-   - Se uv ha **aggiornato** (versione uguale o maggiore) → tiene quella di uv
+```bash
+bash scripts/safe_sync.sh
+```
 
-3. **`--skip-sync`**: salta completamente `uv sync`, usa il venv così com'è. Consigliato su macchine con build GPU custom già funzionanti (es. Linux + Vulkan).
+Equivale a `uv sync --inexact --quiet` ma, se l'operazione toccherebbe una libreria in `benchmark/.custom_packages`, chiede conferma interattiva (`y/N`) e, in caso di sync confermato, restaura la build custom se uv l'avesse downgradata o rimossa.
+
+**Mappa dei punti di entrata:**
+
+| Punto | Modalità | Comportamento se uv toccherebbe build custom |
+|---|---|---|
+| `scripts/safe_sync.sh` | interactive | prompt `y/N` + restore post-sync se downgrade/remove |
+| `start.sh` (avvio app) | non-interactive | SKIP del sync + warning, l'app parte con il venv corrente |
+| `benchmark/run_benchmark_full.sh` | interactive (o `--skip-sync`) | prompt + restore, oppure salta tutto |
+
+`start.sh` usa modalità non-interactive per non bloccare l'avvio dell'app: se le tue dipendenze sono out-of-date e uv vorrebbe aggiornarle ma una build custom è a rischio, l'app parte lo stesso e ti avvisa di lanciare `safe_sync.sh` manualmente quando vuoi gestire l'update.
 
 **File `benchmark/.custom_packages`**: lista dei pacchetti da proteggere (uno per riga). Aggiungere qualsiasi libreria compilata manualmente:
 
@@ -678,6 +687,22 @@ vllm
 torch
 triton
 ```
+
+Quando una wheel PyPI ufficiale include il supporto che ti serviva (es. SSM in `llama-cpp-python`), rimuovi la riga corrispondente — non c'è più nulla da proteggere.
+
+**Bypass diretto (sconsigliato)**: `uv sync` chiamato direttamente dal terminale NON passa per la protezione e può sovrascrivere silenziosamente una build custom. Usalo solo se sai cosa stai facendo o se `.custom_packages` non lista nulla che ti riguardi.
+
+#### Helper opt-in per Qwen 3.5 / SSM (`scripts/setup_ssm_build.sh`)
+
+Se devi usare modelli con architettura ibrida SSM (Qwen 3.5 9B Q3 è il categorizer leader del benchmark) o altre architetture non ancora supportate dalla wheel PyPI standard, lancia:
+
+```bash
+bash scripts/setup_ssm_build.sh
+```
+
+Lo script: (1) rileva il backend GPU (Metal / CUDA / ROCm / Vulkan), (2) chiede conferma, (3) ricompila `llama-cpp-python` da source con i `CMAKE_ARGS` appropriati, (4) verifica l'import, (5) aggiunge `llama_cpp_python` a `benchmark/.custom_packages` se non già presente. D'ora in avanti `start.sh` e `safe_sync.sh` proteggeranno la build dai sync futuri.
+
+Tempo stimato: ~3-5 min su Apple Silicon, ~5-10 min su CUDA, ~10+ min su ROCm/Vulkan. È opt-in di proposito (alpha tester che usano solo Llama/Qwen 2.5/Gemma 3 non pagano questo overhead di setup).
 
 ### Rilevamento GPU
 
