@@ -226,25 +226,24 @@ class NsiTaxonomyService:
             for cat, subs in taxonomy.expenses.items()
         )
         system_prompt = (
-            "Sei un assistente che mappa tag OSM (OpenStreetMap) a categorie "
-            "di SPESA per un'app di finanza personale. "
-            "Rispondi SOLO con JSON valido."
+            "You map OSM (OpenStreetMap) POI tags to EXPENSE categories "
+            "for a personal-finance app. Reply with valid JSON only."
         )
         user_prompt = (
-            "Mappa ciascun tag OSM (sempre una spesa) alla categoria + "
-            "sottocategoria più appropriate.\n\n"
-            "REGOLE:\n"
-            "- 'category' DEVE essere uno dei nomi a sinistra della freccia →.\n"
-            "- 'subcategory' DEVE essere uno dei nomi tra parentesi quadre, "
-            "appartenente alla 'category' scelta.\n"
-            "- Se un tag non corrisponde a nessuna voce, omettilo dall'output.\n\n"
-            "ESEMPI:\n"
+            "Map each OSM tag (always an expense) to the most appropriate "
+            "category + subcategory.\n\n"
+            "RULES:\n"
+            "- 'category' MUST be one of the names to the left of the arrow →.\n"
+            "- 'subcategory' MUST be one of the names inside the square "
+            "brackets that belongs to the chosen 'category'.\n"
+            "- If a tag has no good match in the taxonomy, omit it from the output.\n\n"
+            "EXAMPLES:\n"
             '  amenity=bank → {"category":"Finanza e assicurazioni","subcategory":"Commissioni bancarie"}\n'
             '  amenity=cafe → {"category":"Ristorazione","subcategory":"Bar / caffè"}\n'
             '  amenity=fuel → {"category":"Trasporti","subcategory":"Carburante"}\n\n'
-            f"Tag OSM da mappare:\n{json.dumps(osm_tags, ensure_ascii=False)}\n\n"
-            f"Categorie di spesa disponibili:\n{taxonomy_text}\n\n"
-            'Rispondi con JSON: {"mappings": [{"osm_tag","category","subcategory"}, ...]}.'
+            f"OSM tags to map:\n{json.dumps(osm_tags, ensure_ascii=False)}\n\n"
+            f"Available expense categories:\n{taxonomy_text}\n\n"
+            'Reply with JSON: {"mappings": [{"osm_tag","category","subcategory"}, ...]}.'
         )
         try:
             response = llm_backend.complete_structured(
