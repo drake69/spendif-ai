@@ -1004,10 +1004,10 @@ class LlamaCppBackend(LLMBackend):
             n_available = n_ctx - n_input
             if n_available < _MIN_OUTPUT_TOKENS:
                 raise LLMValidationError(
-                    f"LlamaCppBackend: prompt troppo lungo ({n_input} token) per "
-                    f"context window ({n_ctx}). Disponibili solo {n_available} token "
-                    f"per l'output (minimo {_MIN_OUTPUT_TOKENS}). "
-                    f"Ridurre batch_size o aumentare n_ctx."
+                    f"LlamaCppBackend: prompt too long ({n_input} tokens) for "
+                    f"the current context window ({n_ctx}). Only {n_available} tokens "
+                    f"left for the output (minimum {_MIN_OUTPUT_TOKENS}). "
+                    f"Reduce batch_size or increase n_ctx in LLM Settings."
                 )
             effective_max_tokens = min(_MAX_TOKENS_DEFAULT, n_available)
 
@@ -1034,12 +1034,35 @@ class LlamaCppBackend(LLMBackend):
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             raise LLMValidationError(f"LlamaCppBackend error: {exc}") from exc
         except Exception as exc:
-            # Catch llama_cpp runtime errors (OOM, model errors, etc.)
+            # Catch llama_cpp runtime errors (OOM, decode errors, ...) and
+            # surface an actionable message — the bare repr leaks
+            # implementation details ("llama_decode returned -3") that mean
+            # nothing to the user.
             error_msg = str(exc)
-            if "out of memory" in error_msg.lower() or "oom" in error_msg.lower():
+            lower = error_msg.lower()
+            if "out of memory" in lower or "oom" in lower:
                 raise LLMValidationError(
-                    f"LlamaCppBackend: memoria insufficiente. "
-                    f"Prova un modello più piccolo o riduci n_ctx. Dettaglio: {exc}"
+                    f"LlamaCppBackend: not enough memory. Try a smaller model or "
+                    f"lower n_ctx in LLM Settings. Detail: {exc}"
+                ) from exc
+            # llama.cpp returns the integer status from llama_decode().
+            # `-3` is documented as "context full / KV cache overflow":
+            # the prompt plus the planned output exceed n_ctx.
+            #     https://github.com/ggerganov/llama.cpp/blob/master/include/llama.h
+            if "llama_decode" in lower and "-3" in error_msg:
+                raise LLMValidationError(
+                    f"LlamaCppBackend: KV cache overflow — the prompt exceeded "
+                    f"the current context window ({self._llm.n_ctx()} tokens). "
+                    f"Increase n_ctx in LLM Settings, or pick a model with a "
+                    f"larger context window. Detail: {exc}"
+                ) from exc
+            # `-2` is the generic decode failure (often follow-up to OOM or
+            # malformed grammar). Surface it with a hint so the user knows
+            # it's recoverable by retrying / reducing input.
+            if "llama_decode" in lower and "-2" in error_msg:
+                raise LLMValidationError(
+                    f"LlamaCppBackend: decode failed (input/grammar issue). "
+                    f"Try a shorter prompt or a different model. Detail: {exc}"
                 ) from exc
             raise LLMValidationError(f"LlamaCppBackend error: {exc}") from exc
 
