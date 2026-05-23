@@ -232,8 +232,10 @@ def _build_sankey_data(df: pd.DataFrame) -> Optional[dict]:
     exp_df["subcategory"] = exp_df["subcategory"].fillna(uncat_sub_label)
     cat_totals = exp_df.groupby("category")["abs_amount"].sum().to_dict()
 
-    # Link income → each expense category.
-    for cat, amount in cat_totals.items():
+    # AI-119: order matters — Plotly Sankey with arrangement="perpendicular"
+    # lays out nodes within each column in the order they're added to the
+    # `nodes` list. Sort categories by value DESC so the biggest is on top.
+    for cat, amount in sorted(cat_totals.items(), key=lambda kv: -kv[1]):
         if amount <= 0:
             continue
         cat_idx = _node(f"{cat}")
@@ -241,9 +243,16 @@ def _build_sankey_data(df: pd.DataFrame) -> Optional[dict]:
         link_target.append(cat_idx)
         link_value.append(amount)
 
-    # Link expense category → subcategory.
+    # AI-119: subcategories are grouped by their parent (so siblings stay
+    # adjacent), and within each group sorted by value DESC. Two-key sort
+    # on (cat_total DESC, abs_amount DESC) achieves both at once.
     subcat_totals = (
         exp_df.groupby(["category", "subcategory"])["abs_amount"].sum().reset_index()
+    )
+    subcat_totals["cat_total"] = subcat_totals["category"].map(cat_totals)
+    subcat_totals = subcat_totals.sort_values(
+        by=["cat_total", "abs_amount"],
+        ascending=[False, False],
     )
     for _, row in subcat_totals.iterrows():
         amount = float(row["abs_amount"])
