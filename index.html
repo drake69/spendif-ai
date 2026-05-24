@@ -698,17 +698,17 @@
 <!-- ── TRUST BAR ─────────────────────────────────────────────────────────── -->
 <div class="trust-bar">
   <div class="trust-item"><span class="ico">🔒</span> Dati solo sul tuo computer</div>
-  <div class="trust-item"><span class="ico">🔁</span> Import idempotente SHA-256</div>
+  <div class="trust-item"><span class="ico">🔁</span> Importazione idempotente SHA-256</div>
   <div class="trust-item"><span class="ico">🏦</span> Multi-banca, multi-formato</div>
-  <div class="trust-item"><span class="ico">🤖</span> AI locale o cloud con PII redaction</div>
-  <div class="trust-item"><span class="ico">🧪</span> 199 test, zero dipendenze esterne</div>
+  <div class="trust-item"><span class="ico">🤖</span> AI locale o cloud con redazione PII</div>
+  <div class="trust-item"><span class="ico">🧪</span> Centinaia di test, zero dipendenze esterne</div>
 </div>
 
 <!-- ── PROBLEMA ──────────────────────────────────────────────────────────── -->
 <section id="problema">
   <div class="container">
     <div class="section-label">Il problema</div>
-    <h2>Tre banche, tre file, un casino</h2>
+    <h2>Tre banche, tre file, un caos</h2>
     <p class="section-sub">
       Ogni mese: scarica, apri Excel, incolla, aggiusta i segni, trova i doppioni.
       E ogni volta qualcosa non torna.
@@ -717,25 +717,26 @@
     <div class="problem-grid fade-in">
       <div class="problem-card">
         <h3>😩 La routine mensile che tutti odiano</h3>
-        <p>Tre file movimenti da tre portali bancari diversi, formati CSV incompatibili,
-        date in formati differenti, importi con segni a caso. Unirli a mano richiede ore
-        e genera sempre errori.</p>
+        <p>Tre file movimenti da tre portali bancari diversi, esportazioni CSV con
+        strutture incompatibili, date in formati eterogenei, importi con segni
+        inconsistenti. Unirli a mano richiede ore e genera sempre errori.</p>
       </div>
       <div class="problem-card highlight">
-        <h3>🔴 Il problema dei problemi: il doppio conteggio</h3>
+        <h3>🔴 Il problema più insidioso: il doppio conteggio</h3>
         <p>La spesa al supermercato appare nei movimenti della carta <em>e</em> nel conto corrente
         come addebito mensile aggregato. Sommando tutto, le tue spese sembrano il doppio di
         quelle reali. Nessuno strumento comune risolve questo automaticamente.</p>
       </div>
       <div class="problem-card">
-        <h3>🔄 I giroconti che falsano il bilancio</h3>
+        <h3>🔄 I giroconti che alterano il bilancio</h3>
         <p>Un bonifico al conto deposito non è una spesa. Ma se importi entrambi i conti,
         lo stesso movimento appare due volte — come uscita dal corrente e come entrata sul deposito.</p>
       </div>
       <div class="problem-card">
         <h3>📋 La categorizzazione che non finisce mai</h3>
-        <p>Classificare 300 transazioni al mese a mano è un lavoro. Le app cloud lo fanno,
-        ma inviano i tuoi dati bancari ai loro server e ti chiedono un abbonamento mensile.</p>
+        <p>Classificare a mano 300 transazioni al mese è un lavoro impegnativo. Le app
+        cloud lo fanno, ma inviano i tuoi dati bancari ai loro server e ti chiedono un
+        abbonamento mensile.</p>
       </div>
     </div>
   </div>
@@ -765,8 +766,9 @@
       </div>
       <div class="step">
         <h3>Guarda dove vanno i tuoi soldi</h3>
-        <p>Il ledger unificato mostra tutto in un posto solo: grafici, filtri, export,
-        e la certezza che ogni euro viene contato <strong>una volta sola</strong>.</p>
+        <p>Il ledger unificato mostra tutto in un unico posto: grafici, filtri,
+        esportazioni e la certezza che ogni euro viene contato <strong>una volta
+        sola</strong>.</p>
       </div>
     </div>
   </div>
@@ -779,7 +781,7 @@
   <div class="container">
     <div class="section-label">Cosa nessun altro fa automaticamente</div>
     <h2>Algoritmi che risolvono i problemi reali</h2>
-    <p class="section-sub">Non è una app di budgeting generica. È progettata attorno ai problemi specifici di chi ha più conti bancari italiani.</p>
+    <p class="section-sub">Non è un'app di gestione del budget generica. È progettata attorno ai problemi specifici di chi ha più conti bancari italiani.</p>
 
     <div class="diff-grid fade-in">
       <div class="diff-card">
@@ -788,7 +790,7 @@
         <p>Quando la carta di credito addebita l'importo mensile sul conto corrente,
         Spendif.ai riconosce la relazione e rimuove il doppio conteggio automaticamente.</p>
         <p style="margin-top:.75rem; color: var(--muted); font-size:.88rem;">
-          Finestra temporale ±45 giorni · 3 fasi di matching:
+          Finestra temporale ±45 giorni · 3 fasi di abbinamento:
           finestra scorrevole → subset sum per importi frazionati → riconciliazione parziale
         </p>
       </div>
@@ -834,14 +836,15 @@
     <div class="privacy-grid fade-in">
       <div class="privacy-card">
         <div class="ico-big">🏠</div>
-        <h3>Offline-first per default</h3>
-        <p>Spendif.ai usa <strong>Ollama in locale</strong> di default: un motore AI che gira
-        sul tuo computer, senza connessione internet. I tuoi movimenti non
-        lasciano mai il tuo disco.</p>
+        <h3>Offline per scelta predefinita</h3>
+        <p>Spendif.ai usa <strong>llama.cpp in locale</strong> in modo predefinito: un
+        motore di AI che gira sul tuo computer, senza connessione internet. I tuoi
+        movimenti non lasciano mai il tuo disco. Ollama è disponibile come alternativa
+        locale.</p>
       </div>
       <div class="privacy-card">
         <div class="ico-big">🛡️</div>
-        <h3>PII redaction automatica</h3>
+        <h3>Redazione PII automatica</h3>
         <p>Se usi OpenAI o Claude, Spendif.ai rimuove automaticamente tutti i dati
         identificativi prima di qualsiasi chiamata remota:</p>
         <div class="pii-chips">
@@ -851,7 +854,7 @@
           <span class="pii-chip">Nome → alias fittizio</span>
         </div>
         <p style="margin-top:.75rem; font-size:.83rem; color:var(--muted)">
-          Se il controllo fallisce, la chiamata viene bloccata — non degradata silenziosamente.
+          Se il controllo fallisce, la chiamata viene bloccata — non viene degradata in silenzio.
         </p>
       </div>
       <div class="privacy-card">
@@ -871,7 +874,7 @@
 <section id="per-chi">
   <div class="container">
     <div class="section-label">Per chi è Spendif.ai</div>
-    <h2>Non per tutti. Per chi vuole il controllo vero.</h2>
+    <h2>Non per tutti. Per chi vuole il vero controllo.</h2>
     <p class="section-sub">Quattro profili che trovano in Spendif.ai qualcosa che le alternative non danno.</p>
 
     <div class="audience-grid fade-in">
@@ -888,7 +891,7 @@
         <div>
           <h3>Chi tiene i conti seriamente</h3>
           <p>Se usi Excel per le spese, Spendif.ai può sostituire quella routine:
-          importi i file una volta, Spendif.ai unifica e classifica, tu controlli
+          carichi i file una sola volta, Spendif.ai unifica e classifica, tu controlli
           solo le eccezioni.</p>
         </div>
       </div>
@@ -905,8 +908,8 @@
         <div>
           <h3>Developer</h3>
           <p>Progetto open source Python con architettura modulare, pipeline LLM su dati
-          strutturati, test suite completo. Un punto di partenza per sperimentare o
-          costruire integrazioni custom.</p>
+          strutturati, suite di test completa. Un punto di partenza per sperimentare o
+          costruire integrazioni personalizzate.</p>
         </div>
       </div>
     </div>
@@ -928,7 +931,7 @@
         <span class="feature-desc">CSV e XLSX da qualsiasi banca italiana (e non solo)</span>
       </div>
       <div class="feature-row">
-        <span class="feature-name">Auto-detect formato</span>
+        <span class="feature-name">Riconoscimento automatico del formato</span>
         <span class="feature-desc">Nessuna configurazione manuale per ogni tipo di file</span>
       </div>
       <div class="feature-row">
@@ -948,19 +951,19 @@
         <span class="feature-desc">Regole "ESSELUNGA → Alimentari" applicate retroattivamente</span>
       </div>
       <div class="feature-row">
-        <span class="feature-name">Analytics interattiva</span>
-        <span class="feature-desc">7 grafici: andamento mensile, bilancio cumulato, torta categorie, top 10 commercianti</span>
+        <span class="feature-name">Grafici interattivi</span>
+        <span class="feature-desc">7 grafici: andamento mensile, bilancio cumulato, torta delle categorie, primi 10 commercianti</span>
       </div>
       <div class="feature-row">
         <span class="feature-name">Contesti di vita</span>
         <span class="feature-desc">Segmenta le spese per Lavoro / Vacanza / Quotidianità</span>
       </div>
       <div class="feature-row">
-        <span class="feature-name">Check List</span>
+        <span class="feature-name">Lista di controllo</span>
         <span class="feature-desc">Tabella pivot mese × conto: vedi quali mesi non hai ancora importato</span>
       </div>
       <div class="feature-row">
-        <span class="feature-name">Export</span>
+        <span class="feature-name">Esportazione</span>
         <span class="feature-desc">HTML standalone (con grafici), CSV, XLSX</span>
       </div>
       <div class="feature-row">
@@ -968,7 +971,7 @@
         <span class="feature-desc">Ollama, OpenAI, Claude, Groq, Gemini, LM Studio, qualsiasi API compatibile</span>
       </div>
       <div class="feature-row">
-        <span class="feature-name">PII sanitization</span>
+        <span class="feature-name">Sanitizzazione PII</span>
         <span class="feature-desc">Protezione automatica IBAN / PAN / codice fiscale / nome prima di chiamate remote</span>
       </div>
     </div>
@@ -982,7 +985,7 @@
   <div class="container">
     <div class="section-label">Installazione</div>
     <h2>Un comando, l'app è pronta</h2>
-    <p class="section-sub">App desktop nativa con AI locale inclusa. Niente Docker, niente Terminal sempre aperto.</p>
+    <p class="section-sub">App desktop nativa con AI locale inclusa. Niente Docker, niente terminale sempre aperto.</p>
 
     <p style="text-align:center;margin:1.5rem 0 2.5rem;">
       <a href="getting-started.html" style="display:inline-block;background:var(--blue);color:#fff;padding:0.75rem 1.5rem;border-radius:8px;font-weight:600;text-decoration:none;">📥 Scarica l'installer (DMG · MSIX · .deb · .rpm)</a><br>
@@ -1063,7 +1066,7 @@
     </div>
 
     <p class="install-post">
-      Lo script rileva l'hardware, scarica il modello AI ottimale per la tua RAM (1–7 GB) e configura tutto — <strong>zero intervento</strong>.<br>
+      Lo script rileva l'hardware, scarica il modello AI ottimale per la tua RAM (1–7 GB) e configura tutto — <strong>zero interventi manuali</strong>.<br>
       L'app appare in Launchpad / Start Menu / file manager, pronta all'uso.
     </p>
 
@@ -1076,7 +1079,7 @@
     <div style="margin-top: 2.5rem; padding-top: 2rem; border-top: 1px solid var(--border);">
       <h3 style="color: var(--blue); margin-bottom: 0.5rem;">🐳 Preferisci Docker?</h3>
       <p style="color: var(--muted); margin-bottom: 1.2rem;">
-        Serve solo <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style="color:var(--blue)">Docker Desktop</a>. Container ufficiale da GitHub Container Registry, browser su <strong>http://localhost:8501</strong>.
+        Basta <a href="https://www.docker.com/products/docker-desktop/" target="_blank" style="color:var(--blue)">Docker Desktop</a>. Container ufficiale da GitHub Container Registry, browser su <strong>http://localhost:8501</strong>.
       </p>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
@@ -1106,7 +1109,7 @@
 <!-- ── Community / support ─────────────────────────────────────────────── -->
 <div style="text-align: center; padding: 2.5rem 1rem 1rem; max-width: 760px; margin: 0 auto;">
   <p style="color: var(--muted); font-size: 0.95rem; line-height: 1.8;">
-    🆘 <strong style="color: var(--text);">Serve aiuto?</strong> <a href="https://github.com/drake69/spendify/issues" target="_blank">Apri una issue su GitHub</a> — bug, domande, richieste di funzionalità.<br>
+    🆘 <strong style="color: var(--text);">Serve aiuto?</strong> <a href="https://github.com/drake69/spendify/issues" target="_blank">Apri un'issue su GitHub</a> — bug, domande, richieste di funzionalità.<br>
     ⭐ <strong style="color: var(--text);">Ti piace Spendif.ai?</strong> <a href="https://github.com/drake69/spendify" target="_blank">Lascia una stella</a> — ci aiuta ad arrivare nei repository ufficiali (Homebrew Core, winget).
   </p>
 </div>
@@ -1118,7 +1121,7 @@
   <div class="container">
     <div class="section-label">Stack tecnologico</div>
     <h2>Tecnologie mature, nessuna dipendenza esotica</h2>
-    <p class="section-sub">Nessun framework LLM (no LangChain) — i backend AI usano direttamente gli SDK ufficiali.</p>
+    <p class="section-sub">Nessun framework LLM (niente LangChain): i backend AI usano direttamente gli SDK ufficiali.</p>
 
     <div class="stack-grid fade-in">
       <div class="stack-badge"><strong>Python 3.13</strong> <span>+ pandas</span></div>
@@ -1126,9 +1129,9 @@
       <div class="stack-badge"><strong>SQLite</strong> <span>+ SQLAlchemy</span></div>
       <div class="stack-badge"><strong>Pydantic v2</strong> <span>validazione schemi</span></div>
       <div class="stack-badge"><strong>Plotly</strong> <span>grafici interattivi</span></div>
-      <div class="stack-badge"><strong>uv</strong> <span>package manager</span></div>
+      <div class="stack-badge"><strong>uv</strong> <span>gestore pacchetti</span></div>
       <div class="stack-badge"><strong>Ollama</strong> <span>AI locale</span></div>
-      <div class="stack-badge"><strong>chardet</strong> <span>encoding detection</span></div>
+      <div class="stack-badge"><strong>chardet</strong> <span>rilevamento codifica</span></div>
       <div class="stack-badge"><strong>openpyxl</strong> <span>parsing Excel</span></div>
     </div>
   </div>
@@ -1140,16 +1143,16 @@
 <section id="developer">
   <div class="container">
     <div class="section-label">Per i developer</div>
-    <h2>Architettura modulare, test suite completo</h2>
+    <h2>Architettura modulare, suite di test completa</h2>
 
     <div class="pipeline-box fade-in">
 <span class="ph">File CSV/XLSX</span>
-  <span class="ar">→</span> <span class="label">Pre-processing</span>       <span class="note">(strip righe sparse, drop colonne metadati)</span>
+  <span class="ar">→</span> <span class="label">Pre-processing</span>       <span class="note">(elimina righe sparse, scarta colonne metadati)</span>
   <span class="ar">→</span> <span class="label">Classificatore schema</span> <span class="note">(fingerprint SHA-256 → LLM se schema nuovo)</span>
   <span class="ar">→</span> <span class="label">Normalizzatore</span>         <span class="note">(encoding, parse_amount Decimal, SHA-256 tx_id)</span>
   <span class="ar">→</span> <span class="label">Riconciliatore RF-03</span>  <span class="note">(carta–conto corrente, 3 fasi)</span>
-  <span class="ar">→</span> <span class="label">Rilevatore RF-04</span>      <span class="note">(giroconti interni, matching simbolico)</span>
-  <span class="ar">→</span> <span class="label">Description cleaner</span>   <span class="note">(LLM: rumore → testo canonico)</span>
+  <span class="ar">→</span> <span class="label">Rilevatore RF-04</span>      <span class="note">(giroconti interni, abbinamento simbolico)</span>
+  <span class="ar">→</span> <span class="label">Pulizia descrizioni</span>    <span class="note">(LLM: rumore → testo canonico)</span>
   <span class="ar">→</span> <span class="label">Categorizzatore</span>        <span class="note">(regole → regex → LLM → fallback)</span>
   <span class="ar">→</span> <span class="label">Database</span>               <span class="note">(SQLAlchemy, upsert idempotente)</span>
     </div>
@@ -1159,7 +1162,7 @@
     <div class="contribute-grid fade-in">
       <div class="contribute-card">
         <h3>🔌 Nuovi backend LLM</h3>
-        <p>Implementa <code>LLMBackend</code> (3 metodi) e registralo in <code>BackendFactory</code>. Funziona con qualsiasi API OpenAI-compatible.</p>
+        <p>Implementa <code>LLMBackend</code> (3 metodi) e registralo in <code>BackendFactory</code>. Funziona con qualsiasi API compatibile OpenAI.</p>
       </div>
       <div class="contribute-card">
         <h3>🏦 Nuovi formati bancari</h3>
@@ -1184,8 +1187,8 @@
         <span class="code-label">bash — test suite</span>
       </div>
       <div class="code-body">
-        <div><span class="p">$ </span><span class="c">uv run pytest</span><span class="a"> tests/ -v</span>         <span class="co"># 199 test, zero dipendenze esterne</span></div>
-        <div><span class="p">$ </span><span class="c">uv run pytest</span><span class="a"> tests/ --cov=core</span>  <span class="co"># coverage del business logic layer</span></div>
+        <div><span class="p">$ </span><span class="c">uv run pytest</span><span class="a"> tests/ -v</span>         <span class="co"># centinaia di test, zero dipendenze esterne</span></div>
+        <div><span class="p">$ </span><span class="c">uv run pytest</span><span class="a"> tests/ --cov=core</span>  <span class="co"># coverage del layer di logica di business</span></div>
       </div>
     </div>
   </div>
@@ -1200,14 +1203,14 @@
     <h2>Cosa sta arrivando</h2>
     <br>
     <ul class="roadmap-list fade-in">
-      <li><span class="dot"></span>Supporto PDF — parsing nativo file movimenti PDF bancari</li>
-      <li><span class="dot"></span>Budget mensile per categoria con alerting</li>
+      <li><span class="dot"></span>Supporto PDF — parsing nativo dei file movimenti bancari in PDF</li>
+      <li><span class="dot"></span>Budget mensile per categoria con notifiche</li>
       <li><span class="dot"></span>Importazione automatica via Open Banking (PSD2)</li>
       <li><span class="dot"></span>API REST per integrazioni esterne</li>
       <li><span class="dot"></span>Versione multi-utente con autenticazione</li>
-      <li><span class="dot"></span>App mobile — visualizzazione ledger e analytics</li>
+      <li><span class="dot"></span>App mobile — visualizzazione del ledger e analitiche</li>
       <li><span class="dot"></span>Distribuzione via <strong>Homebrew</strong> (macOS) — <code>brew install --cask spendifai</code></li>
-      <li><span class="dot"></span>Pacchetti <code>.deb</code> e <code>.rpm</code> come release asset GitHub</li>
+      <li><span class="dot"></span>Pacchetti <code>.deb</code> e <code>.rpm</code> come asset di release su GitHub</li>
       <li><span class="dot"></span>Distribuzione via <strong>winget</strong> (Windows) — <code>winget install SpendifAi.SpendifAi</code></li>
     </ul>
   </div>
@@ -1219,21 +1222,21 @@
 <section id="contribuire">
   <div class="container">
     <div class="section-label">Open source</div>
-    <h2>Contribuire è benvenuto</h2>
+    <h2>I contributi sono benvenuti</h2>
     <p class="section-sub">Le aree dove il contributo è più utile:</p>
 
     <div class="contribute-grid fade-in">
       <div class="contribute-card">
         <h3>🏦 Nuovi formati bancari</h3>
-        <p>Se la tua banca non viene riconosciuta automaticamente, apri una issue con un campione CSV anonimizzato.</p>
+        <p>Se la tua banca non viene riconosciuta automaticamente, apri un'issue con un campione CSV anonimizzato.</p>
       </div>
       <div class="contribute-card">
         <h3>🧪 Test UI</h3>
-        <p>La suite copre il layer di business logic ma non ancora l'interfaccia Streamlit. C'è spazio per contribuire.</p>
+        <p>La suite copre il layer di logica di business, ma non ancora l'interfaccia Streamlit. C'è spazio per contribuire.</p>
       </div>
       <div class="contribute-card">
         <h3>🌍 Internazionalizzazione</h3>
-        <p>L'architettura supporta già più lingue per le descrizioni. La UI è in italiano — c'è margine per aggiungere altre lingue.</p>
+        <p>La UI è già internazionalizzata in cinque lingue (IT, EN, FR, DE, ES). C'è margine per aggiungerne altre.</p>
       </div>
       <div class="contribute-card">
         <h3>⚡ Performance</h3>
