@@ -39,7 +39,7 @@ La configurazione viene salvata nel database (`user_settings`) e persiste tra i 
 
 **Prerequisiti:** macOS 12+, Python 3.11+, connessione internet
 
-1. Scarica `install_spendifai.command` dal [repository](https://github.com/drake69/spendify)
+1. Scarica `install_spendifai.command` dal [repository](https://github.com/drake69/spendif-ai)
 2. **Double-click** sul file in Finder
 3. Lo script:
    - Verifica Python e installa `uv` (package manager)
@@ -68,7 +68,7 @@ llama.cpp su Mac usa l'accelerazione **Metal (Apple Silicon)** automaticamente. 
 ### Step 1 — Clona il repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -166,7 +166,7 @@ Stessa procedura del Mac. llama.cpp supporta automaticamente GPU NVIDIA (CUDA) s
 ### Step 1 — Clona il repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -245,7 +245,7 @@ Questa configurazione avvia due container:
 ### Step 1 — Clona il repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -330,7 +330,7 @@ Su Windows usiamo **llama.cpp server** come backend LLM perché funziona in Dock
 Apri PowerShell o Git Bash:
 
 ```powershell
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 

@@ -68,7 +68,7 @@ Adatta a chi vuole modificare il codice o configurare profili LLM (Ollama, llama
 ### 2.1 — Clona il repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -117,7 +117,7 @@ Per la configurazione completa dei backend LLM → [installazione.md](installazi
 ### Steps
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 uv sync
 cp .env.example .env
@@ -332,7 +332,7 @@ Lo script chiede separatamente:
 | Database delle transazioni | Volumi `spendifai_data` e `spendifai_logs` |
 | Modelli Ollama | Volume `ollama_models` (~8 GB) |
 | llama.cpp + cartella models/ | Immagine `llama.cpp:server` + file GGUF |
-| Immagini Docker | `ghcr.io/drake69/spendify` + `ollama/ollama` (~500 MB–1 GB) |
+| Immagini Docker | `ghcr.io/drake69/spendif-ai` + `ollama/ollama` (~500 MB–1 GB) |
 | Cartella di installazione | `~/spendifai/` (o `SPENDIFAI_INSTALL_DIR`) |
 | Istruzioni rimozione Docker Desktop | Guida testuale per macOS / Linux / Windows |
 

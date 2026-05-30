@@ -49,7 +49,7 @@ winget manifest generation.
 
 ### Post-release
 
-- [ ] Verify GitHub release page: https://github.com/drake69/spendify/releases
+- [ ] Verify GitHub release page: https://github.com/drake69/spendif-ai/releases
 - [ ] Download and test DMG on a clean macOS machine
 - [ ] Submit winget PR (see Section 5)
 - [ ] Update landing page version number if hardcoded
