@@ -494,7 +494,7 @@ def render_bulk_edit_page(engine):
                 for a, b in combinations(accts, 2):
                     _pair_counts[(a, b)] = _pair_counts.get((a, b), 0) + 1
 
-            _pivot = _pd.DataFrame("", index=_all_accounts_dup, columns=_all_accounts_dup)
+            _pivot = _pd.DataFrame("", index=_all_accounts_dup, columns=_all_accounts_dup, dtype=object)
             for (a, b), cnt in _pair_counts.items():
                 _pivot.loc[b, a] = cnt
 

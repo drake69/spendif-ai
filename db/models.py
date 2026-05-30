@@ -18,6 +18,7 @@ Thirteen tables:
 from __future__ import annotations
 
 import hashlib
+import os
 import pathlib
 from datetime import datetime, timezone
 
@@ -37,7 +38,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship
 
-DB_URL = "sqlite:///ledger.db"
+# The DB URL is read once at import time from the SPENDIFAI_DB env var so
+# that every call site that imports `get_engine()` without arguments lands
+# on the same database the app initialized. Without this, helpers like
+# `_log_usage_to_db` would silently target `./ledger.db` in the cwd while
+# the app uses `~/.spendifai/db.sqlite` set via SPENDIFAI_DB by the bundle
+# launcher, producing "no such table" errors against a phantom file.
+DB_URL = os.environ.get("SPENDIFAI_DB", "sqlite:///ledger.db")
 
 
 class Base(DeclarativeBase):
@@ -72,7 +79,10 @@ DEFAULT_USER_SETTINGS = {
     "giroconto_mode": "neutral",
     "max_transaction_amount": "1000000",
     "force_schema_import": "false",  # I-04: skip schema review, always auto-import
-    # Categorizer-specific backend (empty = same as classifier)
+    # Categorizer-specific backend (legacy keys — `cat_*` is the old 2-slot
+    # API kept for backward compatibility. New code reads `categorizer_*`
+    # first and falls back to `cat_*` if empty. Will be removed once all
+    # users have migrated to the 4-slot model in `_config_from_settings`.)
     "cat_llm_backend": "",
     "cat_ollama_base_url": "",
     "cat_ollama_model": "",
@@ -86,6 +96,51 @@ DEFAULT_USER_SETTINGS = {
     "cat_llama_cpp_model_path": "",
     "cat_llama_cpp_n_gpu_layers": "-1",
     "cat_llama_cpp_n_ctx": "0",
+    # ── 4-slot phase-specific backends (AI-90) ────────────────────────────
+    # One backend per LLM prompt-family in the pipeline:
+    #   classifier   → core/classifier.py     (single-shot, structural reasoning)
+    #   cleaner      → core/description_cleaner.py (batched, NER-like)
+    #   categorizer  → core/categorizer.py    (batched, classification)
+    #   footer       → core/normalizer.py footer_detect (rare, structural)
+    # When a phase-specific key is empty the runtime falls back to the
+    # main `llm_backend` (and its parameters), so existing installs keep
+    # working with their current single-model setup until the user opts
+    # into per-phase specialisation via Settings.
+    # API keys (openai, anthropic, compat) and base URLs (ollama, compat)
+    # are NOT duplicated per phase — they are account-level and reused
+    # from the main backend automatically.
+    "classifier_llm_backend": "",
+    "classifier_llama_cpp_model_path": "",
+    "classifier_llama_cpp_n_gpu_layers": "-1",
+    "classifier_llama_cpp_n_ctx": "0",
+    "classifier_ollama_model": "",
+    "classifier_openai_model": "",
+    "classifier_anthropic_model": "",
+    "classifier_compat_model": "",
+    "cleaner_llm_backend": "",
+    "cleaner_llama_cpp_model_path": "",
+    "cleaner_llama_cpp_n_gpu_layers": "-1",
+    "cleaner_llama_cpp_n_ctx": "0",
+    "cleaner_ollama_model": "",
+    "cleaner_openai_model": "",
+    "cleaner_anthropic_model": "",
+    "cleaner_compat_model": "",
+    "categorizer_llm_backend": "",
+    "categorizer_llama_cpp_model_path": "",
+    "categorizer_llama_cpp_n_gpu_layers": "-1",
+    "categorizer_llama_cpp_n_ctx": "0",
+    "categorizer_ollama_model": "",
+    "categorizer_openai_model": "",
+    "categorizer_anthropic_model": "",
+    "categorizer_compat_model": "",
+    "footer_llm_backend": "",
+    "footer_llama_cpp_model_path": "",
+    "footer_llama_cpp_n_gpu_layers": "-1",
+    "footer_llama_cpp_n_ctx": "0",
+    "footer_ollama_model": "",
+    "footer_openai_model": "",
+    "footer_anthropic_model": "",
+    "footer_compat_model": "",
     # NOTE: onboarding_done is NOT in defaults — it's managed by
     # _migrate_set_onboarding_done_for_existing_users() and SettingsService.
 }
@@ -405,6 +460,16 @@ class ImportJob(Base):
     n_files = Column(Integer, default=0)
     started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime)
+    # ── Phase timing (AI-88) — milliseconds spent in each pipeline phase
+    # across all files of this job. Cumulative across the job's files
+    # (one job often imports several files in a row, the value is the
+    # sum). Null until at least one file is finalised.
+    ms_header_detection = Column(Integer)
+    ms_classifying      = Column(Integer)
+    ms_footer_detection = Column(Integer)
+    ms_extracting       = Column(Integer)
+    ms_cleaning         = Column(Integer)
+    ms_categorizing     = Column(Integer)
 
 
 class TaxonomyCategory(Base):
@@ -519,7 +584,10 @@ class NsiTagMapping(Base):
 
 
 def _migrate_add_import_job(engine) -> None:
-    """Create import_job table if not present (idempotent)."""
+    """Create import_job table if not present (idempotent) and add the
+    AI-88 ms_* phase-timing columns when missing.
+    """
+    from sqlalchemy import inspect as _inspect
     from sqlalchemy import text as _text
     with engine.connect() as conn:
         conn.execute(_text(
@@ -535,6 +603,24 @@ def _migrate_add_import_job(engine) -> None:
             'completed_at DATETIME)'
         ))
         conn.commit()
+
+    # Additive: add the AI-88 phase-timing columns to existing rows.
+    insp = _inspect(engine)
+    existing_cols = {c["name"] for c in insp.get_columns("import_job")}
+    phase_cols = (
+        "ms_header_detection",
+        "ms_classifying",
+        "ms_footer_detection",
+        "ms_extracting",
+        "ms_cleaning",
+        "ms_categorizing",
+    )
+    missing = [c for c in phase_cols if c not in existing_cols]
+    if missing:
+        with engine.connect() as conn:
+            for col in missing:
+                conn.execute(_text(f"ALTER TABLE import_job ADD COLUMN {col} INTEGER"))
+            conn.commit()
 
 
 def _migrate_add_taxonomy_default(engine) -> None:

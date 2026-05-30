@@ -60,29 +60,46 @@ def _render_section(cfg_svc: SettingsService, type_key: str, section_label: str,
         with st.expander(t("taxonomy.cat_expander", name=cat['name'], n=len(subs)), expanded=bool(q)):
 
             # ── Sottocategorie ────────────────────────────────────────
+            # Subtle row separator (one pixel, low-opacity) reused from
+            # budget_page — keeps each subcategory on a single visual line
+            # without the cost of full zebra-striping in Streamlit.
+            _SUB_ROW_SEPARATOR = (
+                '<hr style="margin: 0.25rem 0 0.5rem 0; border: none; '
+                'border-top: 1px solid rgba(128, 128, 128, 0.18);">'
+            )
             if subs:
-                for sub in subs:
-                    c1, c2, c3 = st.columns([6, 2, 1])
-                    c1.write(f"• {sub['name']}")
-                    new_sub_name = c2.text_input(
+                for s_idx, sub in enumerate(subs):
+                    # 4 columns — label, editable name, ✏️ rename, 🗑 delete.
+                    # Previously the ✏️ button was packed into the same
+                    # column as the text_input and wrapped to the next line
+                    # because the column was too narrow.
+                    c_label, c_input, c_edit, c_del = st.columns(
+                        [6, 3, 1, 1], vertical_alignment="center",
+                    )
+                    c_label.markdown(f"• {sub['name']}")
+                    new_sub_name = c_input.text_input(
                         t("taxonomy.rename"), value=sub["name"],
                         key=f"rename_sub_{sub['id']}",
                         label_visibility="collapsed",
                     )
-                    if c2.button("✏️", key=f"rename_sub_btn_{sub['id']}",
-                                 help=t("taxonomy.rename_subcategory")):
+                    if c_edit.button("✏️", key=f"rename_sub_btn_{sub['id']}",
+                                     help=t("taxonomy.rename_subcategory")):
                         ns = new_sub_name.strip()
                         if ns and ns != sub["name"]:
                             cfg_svc.update_subcategory(sub["id"], ns)
                             st.success(t("taxonomy.renamed_to", name=ns))
                             logger.info(f"taxonomy: renamed subcategory {sub['id']} → '{ns}'")
                             changed = True
-                    if c3.button("🗑", key=f"del_sub_{sub['id']}",
-                                 help=t("taxonomy.delete_sub_help", name=sub['name'])):
+                    if c_del.button("🗑", key=f"del_sub_{sub['id']}",
+                                    help=t("taxonomy.delete_sub_help", name=sub['name'])):
                         cfg_svc.delete_subcategory(sub["id"])
                         st.success(t("taxonomy.sub_deleted", name=sub['name']))
                         logger.info(f"taxonomy: deleted subcategory {sub['id']}")
                         changed = True
+                    # No separator after the last subcategory — the divider
+                    # of the "Add subcategory" block below already closes it.
+                    if s_idx < len(subs) - 1:
+                        st.markdown(_SUB_ROW_SEPARATOR, unsafe_allow_html=True)
             else:
                 st.caption(t("taxonomy.no_subcategories"))
 

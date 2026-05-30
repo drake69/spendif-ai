@@ -128,6 +128,28 @@ class ImportService:
             cat_llama_cpp_model_path=settings.get("cat_llama_cpp_model_path", ""),
             cat_llama_cpp_n_gpu_layers=int(settings.get("cat_llama_cpp_n_gpu_layers", "-1")),
             cat_llama_cpp_n_ctx=int(settings.get("cat_llama_cpp_n_ctx", "0")),
+            # ── 4-slot phase-specific backends (AI-90) ─────────────────────
+            # Empty strings here just mean "fall back to the main backend"
+            # — _build_phase_backend() returns None in that case so the
+            # pipeline reuses the classifier backend instance.
+            **{
+                f"{phase}_{key}": (
+                    int(settings.get(f"{phase}_{key}", "-1" if key.endswith("n_gpu_layers") else "0"))
+                    if key in ("llama_cpp_n_gpu_layers", "llama_cpp_n_ctx")
+                    else settings.get(f"{phase}_{key}", "")
+                )
+                for phase in ("classifier", "cleaner", "categorizer", "footer")
+                for key in (
+                    "llm_backend",
+                    "llama_cpp_model_path",
+                    "llama_cpp_n_gpu_layers",
+                    "llama_cpp_n_ctx",
+                    "ollama_model",
+                    "openai_model",
+                    "anthropic_model",
+                    "compat_model",
+                )
+            },
         )
 
     def get_owner_names(self) -> str:

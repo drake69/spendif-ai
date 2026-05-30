@@ -213,24 +213,37 @@ class NsiTaxonomyService:
         taxonomy: TaxonomyConfig,
         llm_backend,
     ) -> dict[str, tuple[str, str]]:
-        """Single LLM call: map all OSM tags to (category, subcategory) pairs."""
-        taxonomy_text = "Spese:\n" + "\n".join(
-            f"  {cat}: {', '.join(subs)}" for cat, subs in taxonomy.expenses.items()
-        ) + "\nEntrate:\n" + "\n".join(
-            f"  {cat}: {', '.join(subs)}" for cat, subs in taxonomy.income.items()
+        """Single LLM call: map all OSM tags to (category, subcategory) pairs.
+
+        OSM POI tags identify physical merchants, so the domain is always
+        expense-only. The income half of the taxonomy is intentionally
+        omitted: no OSM tag matches it, and its presence used to confuse
+        the model into picking the "Spese" / "Entrate" section headers
+        as category names rather than the real category labels.
+        """
+        taxonomy_text = "\n".join(
+            f"- {cat} → [{', '.join(subs)}]"
+            for cat, subs in taxonomy.expenses.items()
         )
         system_prompt = (
-            "Sei un assistente che mappa tag OSM (OpenStreetMap) a categorie di spesa "
-            "per un'app di finanza personale. Rispondi SOLO con JSON valido."
+            "You map OSM (OpenStreetMap) POI tags to EXPENSE categories "
+            "for a personal-finance app. Reply with valid JSON only."
         )
         user_prompt = (
-            "Mappa ciascun tag OSM alla categoria e sottocategoria più appropriate "
-            "dalla tassonomia fornita. Se un tag non corrisponde a nessuna voce, "
-            "omettilo dall'output.\n\n"
-            f"Tag OSM da mappare:\n{json.dumps(osm_tags, ensure_ascii=False)}\n\n"
-            f"Tassonomia disponibile:\n{taxonomy_text}\n\n"
-            "Rispondi con un oggetto JSON con chiave 'mappings', array di oggetti "
-            "{osm_tag, category, subcategory}."
+            "Map each OSM tag (always an expense) to the most appropriate "
+            "category + subcategory.\n\n"
+            "RULES:\n"
+            "- 'category' MUST be one of the names to the left of the arrow →.\n"
+            "- 'subcategory' MUST be one of the names inside the square "
+            "brackets that belongs to the chosen 'category'.\n"
+            "- If a tag has no good match in the taxonomy, omit it from the output.\n\n"
+            "EXAMPLES:\n"
+            '  amenity=bank → {"category":"Finanza e assicurazioni","subcategory":"Commissioni bancarie"}\n'
+            '  amenity=cafe → {"category":"Ristorazione","subcategory":"Bar / caffè"}\n'
+            '  amenity=fuel → {"category":"Trasporti","subcategory":"Carburante"}\n\n'
+            f"OSM tags to map:\n{json.dumps(osm_tags, ensure_ascii=False)}\n\n"
+            f"Available expense categories:\n{taxonomy_text}\n\n"
+            'Reply with JSON: {"mappings": [{"osm_tag","category","subcategory"}, ...]}.'
         )
         try:
             response = llm_backend.complete_structured(

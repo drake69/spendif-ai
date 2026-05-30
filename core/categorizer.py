@@ -290,7 +290,7 @@ def _run_llm_batch_group(
         batch_indices = indices[batch_start: batch_start + batch_size]
 
         items = []
-        for idx in batch_indices:
+        for j_in_batch, idx in enumerate(batch_indices):
             tx = transactions[idx]
             # Income: use raw_description (keeps context like RIMBORSO, STIPENDIO, PENSIONE)
             # Expense: use cleaned description (counterpart name, needed for NSI/OSM match)
@@ -300,7 +300,16 @@ def _run_llm_batch_group(
                 desc = tx.get("description", "") or ""
             # Always redact before any LLM call (local or remote) — permutation-aware
             desc = redact_pii(desc, sanitize_config)
-            item_dict: dict = {"amount": str(tx.get("amount", 0)), "description": desc}
+            # `idx` is local to this batch (0..n-1) and is echoed back by the
+            # LLM. The output is then mapped by this idx, NOT by list position,
+            # so a reordered / partial response cannot shift categories from
+            # one transaction to another. Mirrors the indexed-batch pattern
+            # already used by description_cleaner (I-16/I-17).
+            item_dict: dict = {
+                "idx": j_in_batch,
+                "amount": str(tx.get("amount", 0)),
+                "description": desc,
+            }
             nsi_hint = tx.get("_nsi_hint")
             if nsi_hint:
                 item_dict["merchant_hint"] = nsi_hint
@@ -356,16 +365,44 @@ def _run_llm_batch_group(
                 f"— using available results, fallback for the rest"
             )
 
+        # Map results by their echoed `idx` (anti-shuffle). Fall back to
+        # positional mapping only if the LLM omitted `idx` entirely (e.g.
+        # an older model that doesn't honour the schema) — this keeps the
+        # function compatible with backends that ignore JSON-schema enums.
+        idx_to_item: dict[int, dict] = {}
+        positional_fallback: list[dict] = []
+        for r in llm_results:
+            if isinstance(r, dict) and isinstance(r.get("idx"), int):
+                idx_to_item[r["idx"]] = r
+            else:
+                positional_fallback.append(r if isinstance(r, dict) else {})
+
+        n_by_idx = sum(1 for j in range(n) if j in idx_to_item)
+        n_by_pos = 0
+        n_missing = 0
+
+        for j_in_batch, tx_idx in enumerate(batch_indices):
+            item = idx_to_item.get(j_in_batch)
+            if item is None:
+                # Position-based recovery: take the next unmapped result if any.
+                if positional_fallback:
+                    item = positional_fallback.pop(0)
+                    n_by_pos += 1
+                else:
+                    item = {}
+                    n_missing += 1
+            amount = _parse_amount(transactions[tx_idx].get("amount"))
+            results[tx_idx] = _validate_llm_result(
+                item, categories, taxonomy, amount, direction, fallback_categories,
+            )
+            results[tx_idx].model_name = backend_used
+
         logger.debug(
             f"categorize_batch [{source_name}] {direction}: "
-            f"batch of {n} via {backend_used}"
+            f"batch of {n} via {backend_used} — "
+            f"{n_by_idx}/{n} by idx, {n_by_pos}/{n} by position fallback, "
+            f"{n_missing}/{n} missing (fell back to default category)"
         )
-
-        for j, idx in enumerate(batch_indices):
-            item = llm_results[j] if j < len(llm_results) else {}
-            amount = _parse_amount(transactions[idx].get("amount"))
-            results[idx] = _validate_llm_result(item, categories, taxonomy, amount, direction, fallback_categories)
-            results[idx].model_name = backend_used
 
         if batch_done_callback:
             batch_done_callback(len(batch_indices))

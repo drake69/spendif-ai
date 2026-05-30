@@ -10,7 +10,7 @@
 # Environment:
 #   MODELS_DIR=/models          — where GGUF files are stored
 #   RESULTS_DIR=/app/results    — where results CSV is written
-#   SYNTHETIC_DIR=/app/tests/generated_files — synthetic test files (mounted or built-in)
+#   SYNTHETIC_DIR=/app/benchmark/generated_files — synthetic test files (mounted or built-in)
 set -euo pipefail
 
 MODELS_DIR="${MODELS_DIR:-/models}"
@@ -47,9 +47,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Ensure synthetic files exist ─────────────────────────────────────────────
-if [ ! -f tests/generated_files/manifest.csv ]; then
+if [ ! -f benchmark/generated_files/manifest.csv ]; then
     echo "→ Generating synthetic test files..."
-    $PYTHON tests/generate_synthetic_files.py
+    $PYTHON benchmark/generate_synthetic_files.py
 fi
 
 # ── Download model if needed ─────────────────────────────────────────────────
@@ -106,7 +106,7 @@ run_one_model() {
 
     # Classifier benchmark
     echo "  → Classifier benchmark..."
-    $PYTHON tests/benchmark_classifier.py \
+    $PYTHON benchmark/benchmark_classifier.py \
         --runs "$RUNS" \
         --backend local_llama_cpp \
         --model-path "$gguf_path" \
@@ -115,7 +115,7 @@ run_one_model() {
     # Categorizer benchmark
     if [ "$SKIP_CATEGORIZER" = false ]; then
         echo "  → Categorizer benchmark..."
-        $PYTHON tests/benchmark_categorizer.py \
+        $PYTHON benchmark/benchmark_categorizer.py \
             --runs "$RUNS" \
             --backend local_llama_cpp \
             --model-path "$gguf_path" \
@@ -157,7 +157,14 @@ fi
 echo ""
 echo "→ Copying results to $RESULTS_DIR..."
 mkdir -p "$RESULTS_DIR"
-cp tests/generated_files/benchmark/*.csv "$RESULTS_DIR/" 2>/dev/null || true
+# benchmark_categorizer.py / benchmark_classifier.py write their CSVs into
+# `benchmark/results/` (see `_RESULTS_ARCHIVE_DIR = _TESTS_DIR / "results"`
+# in benchmark_categorizer.py:71). Copy from there to the mounted output
+# directory so `runpodctl send pod` picks them up.
+cp benchmark/results/*.csv "$RESULTS_DIR/" 2>/dev/null || true
+cp benchmark/results_all_runs.csv "$RESULTS_DIR/" 2>/dev/null || true
+echo "→ Files in $RESULTS_DIR:"
+ls -lh "$RESULTS_DIR/" 2>/dev/null || true
 
 echo ""
 echo "============================================================"

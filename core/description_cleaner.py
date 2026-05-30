@@ -71,9 +71,10 @@ def clean_descriptions_batch(
     transactions: list[dict],
     llm_backend: LLMBackend,
     fallback_backend: LLMBackend | None = None,
-    batch_size: int = 30,
+    batch_size: int = 15,
     source_name: str = "unknown",
     sanitize_config: SanitizationConfig | None = None,
+    progress_callback=None,  # Callable[[float], None] — overall progress 0..1 across both directional passes
 ) -> list[dict]:
     """Extract counterpart names from transaction descriptions using two directional passes.
 
@@ -124,12 +125,31 @@ def clean_descriptions_batch(
 
     expense_cleaned = income_cleaned = 0
 
+    # Weight each directional pass by its share of unique LLM batches so the
+    # overall progress emitted to the caller reflects real wall-clock time.
+    # `_process_group` deduplicates descriptions before batching, so the
+    # relative weight uses the dedup-aware unique count when available
+    # (mirrors the LLM call count); fall back to raw indices otherwise.
+    _n_exp = len(expense_indices)
+    _n_inc = len(income_indices)
+    _total_w = max(1, _n_exp + _n_inc)
+    _w_exp = _n_exp / _total_w if _n_exp else 0.0
+    _w_inc = _n_inc / _total_w if _n_inc else 0.0
+
+    def _make_pass_cb(offset: float, span: float):
+        if progress_callback is None:
+            return None
+        def _cb(p: float):
+            progress_callback(offset + span * max(0.0, min(1.0, p)))
+        return _cb
+
     # ── Pass 1: expenses → find recipient ────────────────────────────────────
     if expense_indices:
         expense_cleaned = _process_group(
             txs, expense_indices, _SYSTEM_EXPENSE,
             llm_backend, fallback_backend, batch_size, source_name, "expense",
             sanitize_config=sanitize_config,
+            progress_callback=_make_pass_cb(0.0, _w_exp),
         )
 
     # ── Pass 2: income → find sender ─────────────────────────────────────────
@@ -138,7 +158,11 @@ def clean_descriptions_batch(
             txs, income_indices, _SYSTEM_INCOME,
             llm_backend, fallback_backend, batch_size, source_name, "income",
             sanitize_config=sanitize_config,
+            progress_callback=_make_pass_cb(_w_exp, _w_inc),
         )
+
+    if progress_callback is not None:
+        progress_callback(1.0)
 
     logger.info(
         f"clean_descriptions_batch [{source_name}]: "
@@ -160,6 +184,7 @@ def _process_group(
     source_name: str,
     label: str,
     sanitize_config: SanitizationConfig | None = None,
+    progress_callback=None,  # Callable[[float], None] — 0..1 within this directional pass
 ) -> int:
     """Process a group of transactions (expense or income) in batches.
     Updates txs[i]["description"] in place. Returns count of cleaned descriptions.
@@ -198,6 +223,7 @@ def _process_group(
     cleaned = _call_llm_batch(
         llm_descs, system_prompt, llm_backend, fallback_backend,
         batch_size, source_name, label,
+        progress_callback=progress_callback,
     )
 
     # ── Step 3: Remap results to all transactions ────────────────────────
@@ -317,12 +343,14 @@ def _call_llm_batch(
     batch_size: int,
     source_name: str,
     label: str,
+    progress_callback=None,  # Callable[[float], None] — emitted after each batch (0..1 within this group)
 ) -> list[str]:
     """Send descriptions to LLM in indexed batches. Returns same-length list.
     Uses indexed input/output to prevent shuffle on small models.
     Falls back to original descriptions on any failure.
     """
     all_results: list[str | None] = [None] * len(descriptions)
+    n_total = max(1, len(descriptions))
 
     for batch_start in range(0, len(descriptions), batch_size):
         batch = descriptions[batch_start: batch_start + batch_size]
@@ -352,6 +380,8 @@ def _call_llm_batch(
             )
             for i, d in enumerate(batch):
                 all_results[batch_start + i] = d
+            if progress_callback is not None:
+                progress_callback((batch_start + n) / n_total)
             continue
 
         results = result.get("results")
@@ -362,6 +392,8 @@ def _call_llm_batch(
             )
             for i, d in enumerate(batch):
                 all_results[batch_start + i] = d
+            if progress_callback is not None:
+                progress_callback((batch_start + n) / n_total)
             continue
 
         # Map by idx (anti-shuffle, I-16)
@@ -410,5 +442,7 @@ def _call_llm_batch(
             f"batch {batch_start}..{batch_start + n} via {backend_used}, "
             f"{n_by_idx}/{n} by idx, {n_by_rev}/{n} by reverse-match"
         )
+        if progress_callback is not None:
+            progress_callback((batch_start + n) / n_total)
 
     return [r if r else descriptions[i] for i, r in enumerate(all_results)]

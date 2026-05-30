@@ -41,7 +41,7 @@ La configurazione viene salvata nel database (`user_settings`) e persiste tra i 
 
 **Prerequisiti:** macOS 12+, Python 3.11+, connessione internet
 
-1. Scarica `install_spendifai.command` dal [repository](https://github.com/drake69/spendify)
+1. Scarica `install_spendifai.command` dal [repository](https://github.com/drake69/spendif-ai)
 2. **Double-click** sul file in Finder
 3. Lo script:
    - Verifica Python e installa `uv` (package manager)
@@ -70,7 +70,7 @@ llama.cpp su Mac usa l'accelerazione **Metal (Apple Silicon)** automaticamente. 
 ### Step 1 — Clona il repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -123,6 +123,8 @@ uv run huggingface-cli download Qwen/Qwen2.5-3B-Instruct-GGUF qwen2.5-3b-instruc
 
 > **Gemma 4 E2B:** richiede `llama-cpp-python` aggiornato. Se ottieni `unknown model architecture: 'gemma4'`, esegui: `uv pip install --upgrade llama-cpp-python`.
 
+> **Qwen 3.5 (architettura ibrida SSM):** la wheel PyPI standard non basta — serve una build da source. Se ottieni `missing tensor 'blk.X.ssm_conv1d.weight'` o `unknown model architecture: 'qwen3'`, lancia: `bash scripts/setup_ssm_build.sh`. Lo script rileva il backend GPU, compila con i `CMAKE_ARGS` corretti (Metal/CUDA/ROCm/Vulkan) e aggiunge `llama_cpp_python` a `benchmark/.custom_packages` così la build viene preservata dai sync futuri.
+
 ### Step 6 — Avvia l'app
 
 ```bash
@@ -166,7 +168,7 @@ Stessa procedura del Mac. llama.cpp supporta automaticamente GPU NVIDIA (CUDA) s
 ### Step 1 — Clona il repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -247,7 +249,7 @@ Questa configurazione avvia due container:
 ### Step 1 — Clona il repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -332,7 +334,7 @@ Su Windows usiamo **llama.cpp server** come backend LLM perché funziona in Dock
 Apri PowerShell o Git Bash:
 
 ```powershell
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 

@@ -1,6 +1,6 @@
 # =============================================================================
 #  Spendif.ai — Windows Uninstaller
-#  https://github.com/drake69/spendify
+#  https://github.com/drake69/spendif-ai
 #
 #  Removes all Spendif.ai components interactively.
 #  No data is deleted without explicit confirmation.

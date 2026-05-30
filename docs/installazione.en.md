@@ -41,7 +41,7 @@ The configuration is saved in the database (`user_settings`) and persists across
 
 **Prerequisites:** macOS 12+, Python 3.11+, internet connection
 
-1. Download `install_spendifai.command` from the [repository](https://github.com/drake69/spendify)
+1. Download `install_spendifai.command` from the [repository](https://github.com/drake69/spendif-ai)
 2. **Double-click** the file in Finder
 3. The script:
    - Checks Python and installs `uv` (package manager)
@@ -70,7 +70,7 @@ llama.cpp on Mac uses **Metal (Apple Silicon)** acceleration automatically. Insi
 ### Step 1 — Clone the repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -123,6 +123,8 @@ uv run huggingface-cli download Qwen/Qwen2.5-3B-Instruct-GGUF qwen2.5-3b-instruc
 
 > **Gemma 4 E2B:** requires an up-to-date `llama-cpp-python`. If you get `unknown model architecture: 'gemma4'`, run: `uv pip install --upgrade llama-cpp-python`.
 
+> **Qwen 3.5 (hybrid SSM architecture):** the standard PyPI wheel is not enough — a source build is required. If you get `missing tensor 'blk.X.ssm_conv1d.weight'` or `unknown model architecture: 'qwen3'`, run: `bash scripts/setup_ssm_build.sh`. The script detects the GPU backend, compiles with the right `CMAKE_ARGS` (Metal/CUDA/ROCm/Vulkan) and registers `llama_cpp_python` in `benchmark/.custom_packages` so the build is preserved across future syncs.
+
 ### Step 6 — Start the app
 
 ```bash
@@ -166,7 +168,7 @@ Same procedure as Mac. llama.cpp automatically supports NVIDIA GPUs (CUDA) if dr
 ### Step 1 — Clone the repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -251,7 +253,7 @@ This configuration starts two containers:
 ### Step 1 — Clone the repository
 
 ```bash
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 
@@ -336,7 +338,7 @@ On Windows we use **llama.cpp server** as the LLM backend because it works in Do
 Open PowerShell or Git Bash:
 
 ```powershell
-git clone https://github.com/drake69/spendify.git spendifai
+git clone https://github.com/drake69/spendif-ai.git spendifai
 cd spendifai
 ```
 

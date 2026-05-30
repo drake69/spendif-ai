@@ -203,6 +203,10 @@ elif page == "taxonomy":
     from ui.taxonomy_page import render_taxonomy_page
     render_taxonomy_page(engine)
 
+elif page == "llm_models":
+    from ui.llm_models_page import render_llm_models_page
+    render_llm_models_page(engine)
+
 elif page == "settings":
     from ui.settings_page import render_settings_page
     render_settings_page(engine)

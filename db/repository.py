@@ -104,6 +104,17 @@ def create_import_batch(
 ) -> ImportBatch:
     existing = session.query(ImportBatch).filter_by(sha256=sha256).first()
     if existing:
+        # Reimport di un batch precedentemente annullato: riattivare il batch
+        # con i nuovi metadati, così l'UI mostra di nuovo il bottone "Annulla"
+        # e il count è coerente con le tx effettivamente attaccate.
+        if existing.status == "cancelled":
+            existing.status = "completed"
+            existing.n_transactions = n_transactions
+            existing.filename = filename
+            existing.flow_used = flow_used
+            existing.errors = errors
+            existing.account_label = account_label
+            session.flush()
         return existing
     batch = ImportBatch(
         sha256=sha256,

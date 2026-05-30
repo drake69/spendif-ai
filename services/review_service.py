@@ -67,6 +67,27 @@ class ReviewService:
             cat_llama_cpp_model_path=settings.get("cat_llama_cpp_model_path", ""),
             cat_llama_cpp_n_gpu_layers=int(settings.get("cat_llama_cpp_n_gpu_layers", "-1")),
             cat_llama_cpp_n_ctx=int(settings.get("cat_llama_cpp_n_ctx", "0")),
+            # ── 4-slot phase-specific backends (AI-90) — mirror of
+            # ImportService._config_from_settings so the Review page rerun
+            # uses the same per-phase routing the import pipeline uses.
+            **{
+                f"{phase}_{key}": (
+                    int(settings.get(f"{phase}_{key}", "-1" if key.endswith("n_gpu_layers") else "0"))
+                    if key in ("llama_cpp_n_gpu_layers", "llama_cpp_n_ctx")
+                    else settings.get(f"{phase}_{key}", "")
+                )
+                for phase in ("classifier", "cleaner", "categorizer", "footer")
+                for key in (
+                    "llm_backend",
+                    "llama_cpp_model_path",
+                    "llama_cpp_n_gpu_layers",
+                    "llama_cpp_n_ctx",
+                    "ollama_model",
+                    "openai_model",
+                    "anthropic_model",
+                    "compat_model",
+                )
+            },
         )
 
     # ── Utility queries ───────────────────────────────────────────────────────
@@ -109,7 +130,7 @@ class ReviewService:
         """
         from core.description_cleaner import clean_descriptions_batch
         from core.categorizer import categorize_batch
-        from core.orchestrator import ProcessingConfig, _build_backend, _build_categorizer_backend, _get_fallback_backend
+        from core.orchestrator import ProcessingConfig, _build_backend, _build_categorizer_backend, _build_phase_backend, _get_fallback_backend
         from core.sanitizer import SanitizationConfig
 
         with self._session() as s:
@@ -117,7 +138,13 @@ class ReviewService:
 
         config = self._config_from_settings(settings)
         backend = _build_backend(config)
-        cat_backend = _build_categorizer_backend(config) or backend
+        # AI-90: per-phase backends. Cleaner and categorizer share the
+        # workload profile (batched LLM JSON output on repetitive
+        # descriptions) but can be configured to different models. When
+        # the per-phase override is empty, _build_phase_backend returns
+        # None and we fall back to the main backend.
+        cleaner_backend = _build_phase_backend(config, "cleaner") or backend
+        cat_backend     = _build_phase_backend(config, "categorizer") or backend
         fallback = _get_fallback_backend(config)
 
         # Load all non-giroconto transactions that still need review
@@ -147,10 +174,11 @@ class ReviewService:
         if not tx_dicts:
             return 0, 0
 
-        # Re-run description cleaner
+        # Re-run description cleaner — uses cleaner_backend (AI-90),
+        # matching the routing of the import pipeline.
         tx_dicts = clean_descriptions_batch(
             tx_dicts,
-            llm_backend=backend,
+            llm_backend=cleaner_backend,
             fallback_backend=fallback,
             source_name="review_rerun",
             sanitize_config=config.sanitize_config,
@@ -290,7 +318,7 @@ class ReviewService:
         Returns (n_updated, n_categorized).
         """
         from core.categorizer import categorize_batch
-        from core.orchestrator import ProcessingConfig, _build_backend, _build_categorizer_backend, _get_fallback_backend
+        from core.orchestrator import ProcessingConfig, _build_backend, _build_categorizer_backend, _build_phase_backend, _get_fallback_backend
         from core.sanitizer import SanitizationConfig
 
         with self._session() as s:
@@ -319,7 +347,13 @@ class ReviewService:
 
         config = self._config_from_settings(settings)
         backend = _build_backend(config)
-        cat_backend = _build_categorizer_backend(config) or backend
+        # AI-90: per-phase backends. Cleaner and categorizer share the
+        # workload profile (batched LLM JSON output on repetitive
+        # descriptions) but can be configured to different models. When
+        # the per-phase override is empty, _build_phase_backend returns
+        # None and we fall back to the main backend.
+        cleaner_backend = _build_phase_backend(config, "cleaner") or backend
+        cat_backend     = _build_phase_backend(config, "categorizer") or backend
         fallback = _get_fallback_backend(config)
 
         _categorizable = {"expense", "income", "card_tx", "unknown"}
@@ -378,7 +412,7 @@ class ReviewService:
         """
         from core.description_cleaner import clean_descriptions_batch
         from core.categorizer import categorize_batch
-        from core.orchestrator import ProcessingConfig, _build_backend, _build_categorizer_backend, _get_fallback_backend
+        from core.orchestrator import ProcessingConfig, _build_backend, _build_categorizer_backend, _build_phase_backend, _get_fallback_backend
         from core.sanitizer import SanitizationConfig
 
         with self._session() as s:
@@ -404,12 +438,20 @@ class ReviewService:
 
         config = self._config_from_settings(settings)
         backend = _build_backend(config)
-        cat_backend = _build_categorizer_backend(config) or backend
+        # AI-90: per-phase backends. Cleaner and categorizer share the
+        # workload profile (batched LLM JSON output on repetitive
+        # descriptions) but can be configured to different models. When
+        # the per-phase override is empty, _build_phase_backend returns
+        # None and we fall back to the main backend.
+        cleaner_backend = _build_phase_backend(config, "cleaner") or backend
+        cat_backend     = _build_phase_backend(config, "categorizer") or backend
         fallback = _get_fallback_backend(config)
 
         if run_cleaner:
+            # AI-90: bulk rerun uses cleaner_backend, mirroring import
+            # pipeline + review_rerun routing.
             tx_dicts = clean_descriptions_batch(
-                tx_dicts, backend, fallback,
+                tx_dicts, cleaner_backend, fallback,
                 source_name="bulk_rerun",
                 sanitize_config=config.sanitize_config,
             )

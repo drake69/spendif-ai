@@ -51,7 +51,7 @@ generazione dei manifest winget.
 
 ### Post-rilascio
 
-- [ ] Verifica la pagina della release GitHub: https://github.com/drake69/spendify/releases
+- [ ] Verifica la pagina della release GitHub: https://github.com/drake69/spendif-ai/releases
 - [ ] Scarica e testa il DMG su una macchina macOS pulita
 - [ ] Invia la PR per winget (vedi Sezione 5)
 - [ ] Aggiorna il numero di versione sulla landing page se hardcoded

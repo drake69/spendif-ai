@@ -570,33 +570,71 @@ def render_upload_page(engine):
 
             def _make_cb(start: float, end: float, fname: str,
                          fidx: int, ftot: int, jid: int, _last: list):
-                def _cb(p: float):
+                def _cb(p: float, phase: str | None = None):
                     pct = start + (end - start) * p
                     _progress_bar.progress(min(pct, 1.0))
                     _status_text.text(f"File {fidx + 1}/{ftot} — {fname}")
-                    _counter_text.caption(t_fn("upload.file_progress", pct=int(p * 100)))
+                    if phase:
+                        _counter_text.caption(
+                            t_fn("upload.file_progress_with_phase",
+                                 phase=t_fn(f"upload.phase.{phase}"),
+                                 pct=int(p * 100))
+                        )
+                    else:
+                        _counter_text.caption(
+                            t_fn("upload.file_progress", pct=int(p * 100))
+                        )
                     now = time.time()
                     if now - _last[0] >= _DB_WRITE_INTERVAL:
                         _last[0] = now
+                        phase_suffix = (
+                            f" — {t_fn(f'upload.phase.{phase}')}" if phase else ""
+                        )
                         import_svc.update_job(
                             jid,
                             progress=round(pct, 4),
-                            status_message=f"File {fidx + 1}/{ftot} — {fname} ({int(p * 100)}%)",
+                            status_message=(
+                                f"File {fidx + 1}/{ftot} — {fname}"
+                                f"{phase_suffix} ({int(p * 100)}%)"
+                            ),
                         )
                 return _cb
 
-            result = import_svc.process_file_single(
-                raw_bytes=raw_bytes,
-                filename=filename,
-                config=config,
-                known_schema=known_schemas.get(filename),
-                progress_callback=_make_cb(
-                    file_start, file_end, filename, i, total_files,
-                    job_id, _last_db_write,
-                ),
-                account_label_override=_file_account_map.get(filename),
-                skip_rows_override=_file_skip_map.get(filename),
-            )
+            try:
+                result = import_svc.process_file_single(
+                    raw_bytes=raw_bytes,
+                    filename=filename,
+                    config=config,
+                    known_schema=known_schemas.get(filename),
+                    progress_callback=_make_cb(
+                        file_start, file_end, filename, i, total_files,
+                        job_id, _last_db_write,
+                    ),
+                    account_label_override=_file_account_map.get(filename),
+                    skip_rows_override=_file_skip_map.get(filename),
+                )
+            except Exception as exc:
+                # Most common cause here: llama-cpp-python raises ValueError
+                # ("Failed to load model from file: …") when a GGUF is
+                # truncated / corrupted / missing. Surface a friendly error
+                # instead of a Streamlit splash + traceback, and mark the
+                # job as errored so the next session doesn't think it's
+                # still running.
+                msg = t_fn("upload.error_backend_load",
+                           filename=filename, error=str(exc)[:300])
+                logger.error(
+                    f"upload_page: process_file_single failed for {filename}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                st.error(msg)
+                import_svc.update_job(
+                    job_id,
+                    status="error",
+                    status_message=str(exc)[:200],
+                    completed_at=datetime.now(timezone.utc),
+                )
+                st.session_state["llm_in_progress"] = False
+                return
 
             if result.needs_schema_review:
                 pending = st.session_state.get("_pending_schema_reviews", [])
@@ -640,6 +678,15 @@ def render_upload_page(engine):
                             n_files=total_files,
                             time=datetime.now(timezone.utc).strftime('%H:%M:%S'))
 
+        # AI-88: accumulate per-phase wall-clock across all files of this
+        # job. Each ImportResult carries `phase_durations_ms` populated by
+        # orchestrator.process_file. Sum them so the job row reports the
+        # total time spent in each pipeline phase across the whole batch.
+        _phase_totals: dict[str, int] = {}
+        for r in results:
+            for phase, ms in (getattr(r, "phase_durations_ms", None) or {}).items():
+                _phase_totals[phase] = _phase_totals.get(phase, 0) + int(ms)
+
         import_svc.update_job(
             job_id,
             status="completed",
@@ -648,6 +695,12 @@ def render_upload_page(engine):
             detail_message=final_detail,
             n_transactions=n_tx,
             completed_at=datetime.now(timezone.utc),
+            ms_header_detection=_phase_totals.get("header_detection"),
+            ms_classifying     =_phase_totals.get("classifying"),
+            ms_footer_detection=_phase_totals.get("footer_detection"),
+            ms_extracting      =_phase_totals.get("extracting"),
+            ms_cleaning        =_phase_totals.get("cleaning"),
+            ms_categorizing    =_phase_totals.get("categorizing"),
         )
 
         st.session_state["llm_in_progress"] = False

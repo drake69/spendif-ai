@@ -539,7 +539,10 @@ def _step3_taxonomy(cfg_svc: SettingsService, lang: str) -> None:
                 label_visibility="collapsed",
             )
             row["name"] = col_name.text_input(
-                "",
+                # Non-empty label hidden via label_visibility — Streamlit
+                # warns ("disallowed in the future") if the label is an
+                # empty string.
+                t("taxonomy.rename_category"),
                 value=row["name"],
                 key=f"{key_prefix}_name_{idx}",
                 label_visibility="collapsed",

@@ -8,28 +8,46 @@
 #
 # Azure ML: pushed to ACR, launched as ML Job with mounted input/output.
 
-FROM nvidia/cuda:13.2.1-runtime-ubuntu22.04
+# CUDA 12.6 chosen for broad RunPod driver compatibility. CUDA 13.x
+# requires a driver only on the very newest pods (most community
+# instances still carry 12.x), and the llama-cpp-python wheel we use
+# (cu121) is fully backward-compatible with 12.6.
+FROM nvidia/cuda:12.6.3-runtime-ubuntu22.04
 
 # ── System deps ──────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3.11-venv python3-pip git curl \
+    git curl ca-certificates build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Use python3.11 as default
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-
 # ── uv ───────────────────────────────────────────────────────────────────────
+# The project's pyproject.toml requires Python >=3.12,<3.14. The CUDA base
+# image ships Python 3.11. Instead of pinning the apt python3.11 from the
+# base image (which uv refuses to use because of the requires-python
+# constraint), let uv download and manage a compatible Python on the
+# fly — that's exactly what UV_PYTHON_DOWNLOADS=auto enables.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-ENV UV_PYTHON_DOWNLOADS=0
+ENV UV_PYTHON_DOWNLOADS=auto
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
+
+# ── llama-cpp-python with CUDA acceleration ──────────────────────────────────
+# The default PyPI wheel of llama-cpp-python is CPU-only. On a CUDA base
+# image the model would still load but run on the container's CPU,
+# wasting the GPU. Reinstall the CUDA-enabled prebuilt wheel from
+# abetlen's index — same version pinned in uv.lock, just compiled with
+# GGML_CUDA=on. Roughly 5-10× speedup on Ampere/Ada cards.
+# When abetlen drops the cu121 wheel for a newer release, bump the
+# tag here in lockstep with the uv.lock pin.
+ARG LLAMA_CPP_CUDA_TAG=cu121
+RUN UV_EXTRA_INDEX_URL="https://abetlen.github.io/llama-cpp-python/whl/${LLAMA_CPP_CUDA_TAG}" \
+    uv pip install --upgrade --force-reinstall --no-deps "llama-cpp-python"
 
 COPY . .
 ENV PATH="/app/.venv/bin:$PATH"

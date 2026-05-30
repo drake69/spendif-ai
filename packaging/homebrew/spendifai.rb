@@ -4,7 +4,7 @@
 #   https://github.com/drake69/homebrew-spendifai
 # under the path:  Casks/spendifai.rb
 #
-# It is NOT part of the main code repository (drake69/spendify).
+# It is NOT part of the main code repository (drake69/spendif-ai).
 # The release pipeline (packaging/release.sh in the main repo) updates
 # the `version` and `sha256` fields automatically on each release and
 # commits the change to the tap repo.
@@ -20,10 +20,10 @@ cask "spendifai" do
   version "0.1.0"
   sha256 "PLACEHOLDER_SHA256_DMG"
 
-  url "https://github.com/drake69/spendify/releases/download/v#{version}/Spendif.ai-#{version}.dmg"
+  url "https://github.com/drake69/spendif-ai/releases/download/v#{version}/Spendif.ai-#{version}.dmg"
   name "Spendif.ai"
   desc "Personal finance manager with local AI categorisation"
-  homepage "https://github.com/drake69/spendify"
+  homepage "https://github.com/drake69/spendif-ai"
 
   # App bundle extracted from DMG (native pywebview window, no Terminal)
   app "SpendifAi.app", target: "Spendif.ai.app"

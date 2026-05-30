@@ -1002,6 +1002,11 @@ class FileSchema:
     amount_col: str | None = None  # for single column
     debit_col: str | None = None   # for split
     credit_col: str | None = None  # for split
+    # AI-107 regression fixture — when set, the file gets an extra data
+    # column with the same value on every row (card number, IBAN, customer
+    # id). The classifier must NOT pick this column as an amount candidate.
+    identifier_col: str | None = None
+    identifier_value: str | None = None
 
     @property
     def column_names(self) -> list[str]:
@@ -1014,6 +1019,8 @@ class FileSchema:
         else:
             cols.append(self.debit_col)
             cols.append(self.credit_col)
+        if self.identifier_col:
+            cols.append(self.identifier_col)
         if self.currency_col:
             cols.append(self.currency_col)
         return cols
@@ -1023,8 +1030,19 @@ class FileSchema:
         return self.amount_format in ("debit_credit_split", "debit_credit_signed")
 
 
-def _make_schema(index: int, is_credit_card: bool = False) -> FileSchema:
-    """Create a unique FileSchema based on index for variety."""
+def _make_schema(
+    index: int,
+    is_credit_card: bool = False,
+    identifier_kind: Literal["card_number", "iban", "customer_id"] | None = None,
+) -> FileSchema:
+    """Create a unique FileSchema based on index for variety.
+
+    When ``identifier_kind`` is set, the schema gets an extra data column
+    filled with a constant value on every row. This is a regression
+    fixture for AI-107 — the classifier must not pick such columns as
+    amount candidates. Card numbers are stored as 16-digit negatives to
+    match the worst-case bug (AMEX export observed 2026-05-22).
+    """
     rng = random.Random(42 + index * 7)
 
     date_col = DATE_COL_NAMES[index % len(DATE_COL_NAMES)]
@@ -1038,12 +1056,33 @@ def _make_schema(index: int, is_credit_card: bool = False) -> FileSchema:
         formats = ["signed_single", "debit_credit_split", "debit_credit_signed"]
         amount_format = formats[index % len(formats)]
 
+    # Identifier column (AI-107). Picked deterministically per index so the
+    # same seed reproduces the same fixture.
+    identifier_col: str | None = None
+    identifier_value: str | None = None
+    if identifier_kind == "card_number":
+        identifier_col = "Numero Carta"
+        # Negative 16-digit literal — the worst-case shape the bug observed
+        # (AMEX export had `-1234567890123456` and the classifier picked it
+        # as amount_col).
+        identifier_value = f"-{rng.randint(10**15, 10**16 - 1)}"
+    elif identifier_kind == "iban":
+        identifier_col = "IBAN"
+        identifier_value = (
+            "IT" + str(rng.randint(10, 99)) + "A"
+            + "".join(str(rng.randint(0, 9)) for _ in range(22))
+        )
+    elif identifier_kind == "customer_id":
+        identifier_col = "Codice Cliente"
+        identifier_value = str(rng.randint(100000, 999999))
+
     if amount_format in ("signed_single", "positive_only"):
         amount_col = AMOUNT_SINGLE_NAMES[index % len(AMOUNT_SINGLE_NAMES)]
         return FileSchema(
             date_col=date_col, valuta_col=valuta_col,
             description_col=desc_col, currency_col=curr_col,
             amount_format=amount_format, amount_col=amount_col,
+            identifier_col=identifier_col, identifier_value=identifier_value,
         )
     else:
         idx_d = index % len(AMOUNT_DEBIT_NAMES)
@@ -1053,6 +1092,7 @@ def _make_schema(index: int, is_credit_card: bool = False) -> FileSchema:
             amount_format=amount_format,
             debit_col=AMOUNT_DEBIT_NAMES[idx_d],
             credit_col=AMOUNT_CREDIT_NAMES[idx_d],
+            identifier_col=identifier_col, identifier_value=identifier_value,
         )
 
 
@@ -1183,6 +1223,10 @@ def _txn_to_row(
         else:
             row.append(round(debit_val, 2) if debit_val != "" else None)
             row.append(round(credit_val, 2) if credit_val != "" else None)
+
+    # Identifier (constant on every row — AI-107 regression fixture)
+    if schema.identifier_col:
+        row.append(schema.identifier_value or "")
 
     # Currency
     if schema.currency_col:
@@ -1574,7 +1618,24 @@ def main() -> None:
     for plan in plans:
         inst = INSTRUMENT_MAP[plan.account_id]
         is_cc = inst.doc_type == "credit_card"
-        schema = _make_schema(plan.schema_index, is_credit_card=is_cc)
+
+        # AI-107 regression fixture: sprinkle identifier columns (card
+        # number, IBAN, customer id) deterministically across the file
+        # set, so the classifier benchmark always exercises the
+        # "constant-value column ≠ amount" path. Modulus values chosen
+        # so each kind is represented but doesn't dominate.
+        identifier_kind = None
+        if is_cc and plan.schema_index % 5 == 2:
+            identifier_kind = "card_number"
+        elif (not is_cc) and plan.schema_index % 7 == 4:
+            identifier_kind = "iban"
+        elif plan.schema_index % 13 == 9:
+            identifier_kind = "customer_id"
+
+        schema = _make_schema(
+            plan.schema_index, is_credit_card=is_cc,
+            identifier_kind=identifier_kind,
+        )
 
         # Generate transactions
         txns = generate_transactions(plan.account_id, plan.n_data_rows)

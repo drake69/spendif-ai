@@ -176,7 +176,7 @@ def render_checklist_page(engine) -> None:
 
     styled = (
         display_df.style
-        .applymap(_cell_color)
+        .map(_cell_color)
         .format(_cell_fmt)
         .set_properties(**{"text-align": "center", "min-width": "80px"})
         .set_table_styles([

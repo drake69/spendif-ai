@@ -283,12 +283,22 @@ def build_categorization_schema(expense_categories: list[str], income_categories
 
 
 def build_categorization_batch_schema(categories: list[str], dir_subs: list[str]) -> dict[str, Any]:
-    """Build the JSON schema for batched LLM categorization (array response)."""
+    """Build the JSON schema for batched LLM categorization (array response).
+
+    Each item carries an explicit `idx` matching the input transaction index
+    inside the batch. The caller maps results by idx, not by position, so
+    a reordered or partial LLM response no longer shifts categories from one
+    transaction to another (anti-shuffle pattern, mirrors the cleaner I-16/I-17).
+    """
     item_schema = {
         "type": "object",
-        "required": ["category", "subcategory", "confidence", "rationale"],
+        "required": ["idx", "category", "subcategory", "confidence", "rationale"],
         "additionalProperties": False,
         "properties": {
+            "idx": {
+                "type": "integer",
+                "minimum": 0,
+            },
             "category": {
                 "type": "string",
                 "enum": categories,

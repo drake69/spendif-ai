@@ -548,8 +548,15 @@ def _is_numeric_cell(value) -> bool:
 # ── Date normalization ────────────────────────────────────────────────────────
 
 _DATE_FORMATS_FALLBACK = [
+    # Date-only
     "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y",
     "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%m/%d/%y",
+    # Datetime with time (Revolut, Wise, N26, PayPal export …)
+    # strptime(...).date() truncates the time portion safely.
+    "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M",    "%Y-%m-%dT%H:%M",
+    "%d/%m/%Y %H:%M:%S", "%d-%m-%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M",    "%d-%m-%Y %H:%M",
 ]
 
 

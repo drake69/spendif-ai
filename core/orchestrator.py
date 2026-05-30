@@ -130,7 +130,7 @@ class ProcessingConfig:
     # Classifier mode: "auto" (detect from model size), "single" (1 LLM call), "multi_step" (3 calls)
     classifier_mode: str = "auto"
 
-    # Categorizer-specific backend (empty = same as classifier)
+    # Categorizer-specific backend (legacy — kept for backward compat).
     cat_llm_backend: str = ""
     cat_ollama_base_url: str = ""
     cat_ollama_model: str = ""
@@ -144,6 +144,41 @@ class ProcessingConfig:
     cat_llama_cpp_model_path: str = ""
     cat_llama_cpp_n_gpu_layers: int = -1
     cat_llama_cpp_n_ctx: int = 0
+    # ── 4-slot phase-specific backends (AI-90) ────────────────────────────
+    # See db/models.py DEFAULT_USER_SETTINGS for the design rationale.
+    # Empty values fall back to the main `llm_backend` configuration.
+    classifier_llm_backend: str = ""
+    classifier_llama_cpp_model_path: str = ""
+    classifier_llama_cpp_n_gpu_layers: int = -1
+    classifier_llama_cpp_n_ctx: int = 0
+    classifier_ollama_model: str = ""
+    classifier_openai_model: str = ""
+    classifier_anthropic_model: str = ""
+    classifier_compat_model: str = ""
+    cleaner_llm_backend: str = ""
+    cleaner_llama_cpp_model_path: str = ""
+    cleaner_llama_cpp_n_gpu_layers: int = -1
+    cleaner_llama_cpp_n_ctx: int = 0
+    cleaner_ollama_model: str = ""
+    cleaner_openai_model: str = ""
+    cleaner_anthropic_model: str = ""
+    cleaner_compat_model: str = ""
+    categorizer_llm_backend: str = ""
+    categorizer_llama_cpp_model_path: str = ""
+    categorizer_llama_cpp_n_gpu_layers: int = -1
+    categorizer_llama_cpp_n_ctx: int = 0
+    categorizer_ollama_model: str = ""
+    categorizer_openai_model: str = ""
+    categorizer_anthropic_model: str = ""
+    categorizer_compat_model: str = ""
+    footer_llm_backend: str = ""
+    footer_llama_cpp_model_path: str = ""
+    footer_llama_cpp_n_gpu_layers: int = -1
+    footer_llama_cpp_n_ctx: int = 0
+    footer_ollama_model: str = ""
+    footer_openai_model: str = ""
+    footer_anthropic_model: str = ""
+    footer_compat_model: str = ""
 
 
 @dataclass
@@ -173,6 +208,10 @@ class ImportResult:
     skipped_rows: list[SkippedRow] = field(default_factory=list)  # rows skipped during normalisation
     merged_count: int = 0             # intra-file duplicate rows merged
     internal_transfer_count: int = 0  # transactions detected as giroconti (always saved)
+    # Phase timings in milliseconds (AI-88). Keys: header_detection,
+    # classifying, footer_detection, extracting, cleaning, categorizing.
+    # Empty when a phase didn't run (e.g. Flow-1 cache hit skips classify).
+    phase_durations_ms: dict[str, int] = field(default_factory=dict)
 
 
 def _build_backend(config: ProcessingConfig) -> LLMBackend:
@@ -220,40 +259,106 @@ def _get_fallback_backend(config: ProcessingConfig) -> Optional[OllamaBackend]:
 
 
 def _build_categorizer_backend(config: ProcessingConfig) -> Optional[LLMBackend]:
-    """Build a separate LLM backend for categorization, or None to reuse the classifier backend."""
-    if not config.cat_llm_backend:
+    """Backward-compat shim. New code should call ``_build_phase_backend(config, 'categorizer')``.
+
+    Returns None when neither the new `categorizer_llm_backend` nor the
+    legacy `cat_llm_backend` is set — caller is expected to fall back to
+    the main classifier backend in that case.
+    """
+    return _build_phase_backend(config, "categorizer")
+
+
+# Phases that can override the main LLM backend independently.
+PHASE_NAMES = ("classifier", "cleaner", "categorizer", "footer")
+
+
+def _build_phase_backend(config: ProcessingConfig, phase: str) -> Optional[LLMBackend]:
+    """Build a phase-specific LLM backend, or None if the phase isn't overridden.
+
+    A phase has its own backend iff the user set `<phase>_llm_backend` (new
+    4-slot API) — or, for the `categorizer` phase only, the legacy
+    `cat_llm_backend` field (kept transitional). Returns None otherwise so
+    the caller reuses the main backend instance.
+
+    Account-level credentials (API keys, base URLs for ollama/compat) are
+    always inherited from the main backend — they aren't duplicated per
+    phase because they describe the account, not the model.
+
+    AI-90: when this returns None we fall back to the main backend; when
+    it returns a backend the caller uses it for just that phase's LLM
+    calls (classifier / cleaner / categorizer / footer).
+    """
+    if phase not in PHASE_NAMES:
+        raise ValueError(f"Unknown phase: {phase!r}. Expected one of {PHASE_NAMES}.")
+
+    # Resolve the per-phase backend selector. For backward compatibility,
+    # the `categorizer` phase also honours the legacy `cat_*` keys.
+    phase_backend = getattr(config, f"{phase}_llm_backend", "") or ""
+    if not phase_backend and phase == "categorizer":
+        phase_backend = config.cat_llm_backend or ""
+    if not phase_backend:
         return None
+
     kwargs: dict[str, Any] = {"timeout": config.llm_timeout_s}
-    if config.cat_llm_backend == "local_ollama":
-        kwargs["base_url"] = config.cat_ollama_base_url or config.ollama_base_url
-        kwargs["model"] = config.cat_ollama_model or config.ollama_model
-    elif config.cat_llm_backend == "openai":
-        kwargs["model"] = config.cat_openai_model or config.openai_model
-        kwargs["api_key"] = config.cat_openai_api_key or config.openai_api_key
-    elif config.cat_llm_backend == "claude":
-        kwargs["model"] = config.cat_claude_model or config.claude_model
-        kwargs["api_key"] = config.cat_anthropic_api_key or config.anthropic_api_key
-    elif config.cat_llm_backend == "openai_compatible":
-        kwargs["base_url"] = config.cat_compat_base_url or config.compat_base_url
-        kwargs["api_key"] = config.cat_compat_api_key or config.compat_api_key
-        kwargs["model"] = config.cat_compat_model or config.compat_model
-    elif config.cat_llm_backend == "local_llama_cpp":
+
+    def _phase_or_main(attr: str, main_attr: str | None = None) -> str:
+        # Per-phase value if set, otherwise fall back to the main config value
+        # (or legacy `cat_*` value if we're handling the categorizer phase).
+        val = getattr(config, f"{phase}_{attr}", "") or ""
+        if not val and phase == "categorizer":
+            val = getattr(config, f"cat_{attr}", "") or ""
+        if not val and main_attr:
+            val = getattr(config, main_attr, "") or ""
+        return val
+
+    if phase_backend == "local_ollama":
+        # base_url is account-level → always inherited from main config.
+        kwargs["base_url"] = config.ollama_base_url
+        kwargs["model"] = _phase_or_main("ollama_model", "ollama_model")
+    elif phase_backend == "openai":
+        kwargs["model"] = _phase_or_main("openai_model", "openai_model")
+        kwargs["api_key"] = config.openai_api_key
+    elif phase_backend == "claude":
+        kwargs["model"] = _phase_or_main("anthropic_model", "claude_model")
+        kwargs["api_key"] = config.anthropic_api_key
+    elif phase_backend == "openai_compatible":
+        # base_url + api_key are account-level → inherited from main config.
+        kwargs["base_url"] = config.compat_base_url
+        kwargs["api_key"]  = config.compat_api_key
+        kwargs["model"]    = _phase_or_main("compat_model", "compat_model")
+    elif phase_backend == "local_llama_cpp":
         kwargs.pop("timeout", None)
-        path = config.cat_llama_cpp_model_path or config.llama_cpp_model_path
+        path = _phase_or_main("llama_cpp_model_path", "llama_cpp_model_path")
         if path:
             kwargs["model_path"] = path
-        kwargs["n_gpu_layers"] = config.cat_llama_cpp_n_gpu_layers if config.cat_llama_cpp_model_path else config.llama_cpp_n_gpu_layers
-        kwargs["n_ctx"] = config.cat_llama_cpp_n_ctx if config.cat_llama_cpp_model_path else config.llama_cpp_n_ctx
-    elif config.cat_llm_backend == "vllm":
+        # n_gpu_layers / n_ctx: phase-specific if set (≠ default), otherwise main.
+        phase_layers = getattr(config, f"{phase}_llama_cpp_n_gpu_layers", -1)
+        phase_ctx    = getattr(config, f"{phase}_llama_cpp_n_ctx", 0)
+        legacy_layers = config.cat_llama_cpp_n_gpu_layers if phase == "categorizer" else -1
+        legacy_ctx    = config.cat_llama_cpp_n_ctx if phase == "categorizer" else 0
+        legacy_path   = config.cat_llama_cpp_model_path if phase == "categorizer" else ""
+        # Use the phase-specific HW knobs only when the phase actually overrides
+        # the path; otherwise inherit from main so the user doesn't get
+        # silently inconsistent layers/ctx on a model they didn't override.
+        if getattr(config, f"{phase}_llama_cpp_model_path", ""):
+            kwargs["n_gpu_layers"] = phase_layers
+            kwargs["n_ctx"]        = phase_ctx
+        elif legacy_path:
+            kwargs["n_gpu_layers"] = legacy_layers
+            kwargs["n_ctx"]        = legacy_ctx
+        else:
+            kwargs["n_gpu_layers"] = config.llama_cpp_n_gpu_layers
+            kwargs["n_ctx"]        = config.llama_cpp_n_ctx
+    elif phase_backend == "vllm":
         kwargs["base_url"] = config.vllm_base_url
-        kwargs["model"] = config.vllm_model
-        kwargs["api_key"] = config.vllm_api_key
-    elif config.cat_llm_backend == "vllm_offline":
+        kwargs["model"]    = config.vllm_model
+        kwargs["api_key"]  = config.vllm_api_key
+    elif phase_backend == "vllm_offline":
         kwargs.pop("timeout", None)
         kwargs["model"] = config.vllm_offline_model
-        kwargs["tensor_parallel_size"] = config.vllm_offline_tensor_parallel
-        kwargs["gpu_memory_utilization"] = config.vllm_offline_gpu_memory_utilization
-    return BackendFactory.create(config.cat_llm_backend, **kwargs)
+        kwargs["tensor_parallel_size"]    = config.vllm_offline_tensor_parallel
+        kwargs["gpu_memory_utilization"]  = config.vllm_offline_gpu_memory_utilization
+    return BackendFactory.create(phase_backend, **kwargs)
 
 
 def load_raw_dataframe(
@@ -677,7 +782,7 @@ def process_file(
     taxonomy: TaxonomyConfig,
     user_rules: list[CategoryRule],
     known_schema: Optional[DocumentSchema] = None,
-    progress_callback=None,  # Callable[[float], None] — 0.0..1.0 within this file
+    progress_callback=None,  # Callable[[float, str|None], None] — 0..1 + phase key (header_detection|classifying|footer_detection|extracting|cleaning|categorizing). Backward-compat: callables accepting only (float,) are still supported.
     existing_tx_ids_checker=None,  # Callable[[list[str]], set[str]] — returns already-imported tx ids
     account_label_override: Optional[str] = None,  # user-selected account name; overrides LLM-assigned label
     skip_rows_override: Optional[int] = None,  # user-confirmed skip_rows from UI; takes precedence over schema
@@ -702,20 +807,76 @@ def process_file(
     Returns:
         ImportResult.
     """
-    def _progress(p: float):
+    # ── Phase timing (AI-88) ──────────────────────────────────────────────
+    # Piggyback on the `_progress(p, phase)` transitions to time each
+    # pipeline phase without adding manual `start`/`stop` calls all over
+    # the function. Closed phases accumulate into `_phase_durations_ms`,
+    # the open one tracks its start in `_phase_starts`. `_finalize_phase
+    # _timings()` is called before every early `return ImportResult(...)`
+    # so partial-flow results (Flow-2 schema review, normalization
+    # errors, etc.) still report the work they actually did.
+    import time as _phase_time
+    _phase_starts: dict[str, float] = {}
+    _phase_durations_ms: dict[str, int] = {}
+    _current_phase: list[str | None] = [None]
+
+    def _phase_close(name: str) -> None:
+        t0 = _phase_starts.pop(name, None)
+        if t0 is None:
+            return
+        elapsed_ms = int((_phase_time.monotonic() - t0) * 1000)
+        _phase_durations_ms[name] = _phase_durations_ms.get(name, 0) + elapsed_ms
+
+    def _finalize_phase_timings() -> None:
+        # Close whatever phase is still open at the moment of return.
+        if _current_phase[0] is not None:
+            _phase_close(_current_phase[0])
+            _current_phase[0] = None
+
+    def _progress(p: float, phase: str | None = None):
+        # phase is one of: header_detection, classifying, footer_detection,
+        # extracting, cleaning, categorizing — the UI maps it to a localized
+        # label via the `upload.phase.<key>` i18n entries.
+        if phase and phase != _current_phase[0]:
+            # Phase transition: close the previous, open the new.
+            if _current_phase[0] is not None:
+                _phase_close(_current_phase[0])
+            _phase_starts[phase] = _phase_time.monotonic()
+            _current_phase[0] = phase
         if progress_callback:
-            progress_callback(max(0.0, min(1.0, p)))
+            clamped = max(0.0, min(1.0, p))
+            try:
+                progress_callback(clamped, phase)
+            except TypeError:
+                # Legacy callbacks accepting only (float,) — keep working.
+                progress_callback(clamped)
 
     batch_sha256 = compute_file_hash(raw_bytes)
     logger.info(f"process_file: loading {filename} ({len(raw_bytes)} bytes)")
     backend = _build_backend(config)
     fallback = _get_fallback_backend(config)
-    cat_backend = _build_categorizer_backend(config) or backend
-    if cat_backend is not backend:
-        logger.info(f"process_file: using separate categorizer backend ({config.cat_llm_backend})")
+    # ── 4-slot phase backends (AI-90) ────────────────────────────────────
+    # Each phase falls back to the main `backend` when its override is empty.
+    # `cat_backend` is kept as an alias to preserve the public signature of
+    # the categorize_batch call site below.
+    classifier_backend = _build_phase_backend(config, "classifier") or backend
+    cleaner_backend    = _build_phase_backend(config, "cleaner")    or backend
+    cat_backend        = _build_phase_backend(config, "categorizer") or backend
+    footer_backend     = _build_phase_backend(config, "footer")     or backend
+    for phase_name, phase_backend in (
+        ("classifier", classifier_backend),
+        ("cleaner",    cleaner_backend),
+        ("categorizer", cat_backend),
+        ("footer",     footer_backend),
+    ):
+        if phase_backend is not backend:
+            logger.info(
+                f"process_file: using dedicated {phase_name} backend "
+                f"({getattr(config, f'{phase_name}_llm_backend', '') or 'cat_*'})"
+            )
 
-    # Load raw data
-    _progress(0.0)
+    # Load raw data — load_raw_dataframe detects skip_rows + header internally
+    _progress(0.0, "header_detection")
     # skip_rows_override (from UI) takes precedence; fall back to cached schema value
     skip_override = (
         skip_rows_override
@@ -733,7 +894,7 @@ def process_file(
         f"process_file: loaded {filename} | rows={len(df_raw)} "
         f"ncols={len(df_raw.columns)} | known_schema={'yes' if known_schema else 'no'}"
     )
-    _progress(0.05)
+    _progress(0.05, "classifying")
 
     # Test mode: truncate to first N rows for quick pipeline verification
     if config.test_mode and len(df_raw) > config.test_mode_rows:
@@ -743,6 +904,7 @@ def process_file(
         )
 
     if df_raw.empty:
+        _finalize_phase_timings()
         return ImportResult(
             batch_sha256=batch_sha256,
             source_name=filename,
@@ -753,6 +915,7 @@ def process_file(
             errors=["Empty file or no data found"],
             total_file_rows=0,
             header_rows_skipped=_header_rows_skipped,
+            phase_durations_ms=_phase_durations_ms,
         )
 
     flow_used = "flow1"
@@ -814,7 +977,7 @@ def process_file(
         logger.info(f"process_file: no known schema for {filename}, using Flow 2")
         doc_schema = classify_document(
             df_raw=df_raw,
-            llm_backend=backend,
+            llm_backend=classifier_backend,
             source_name=filename,
             sanitize=True,
             sanitize_config=config.sanitize_config,
@@ -824,7 +987,7 @@ def process_file(
             account_type=_account_type,
             classifier_mode=config.classifier_mode,
         )
-        _progress(0.25)
+        _progress(0.25, "classifying")
 
         # Confidence-based auto-import decision (I-04: force_schema_import bypasses review)
         _score = doc_schema.confidence_score if doc_schema else 0.0
@@ -846,6 +1009,7 @@ def process_file(
                 f"process_file: Flow 2 for {filename} — confidence_score={_score} < "
                 f"{config.confidence_threshold} → stopping for user schema review"
             )
+            _finalize_phase_timings()
             return ImportResult(
                 batch_sha256=batch_sha256,
                 source_name=filename,
@@ -859,9 +1023,10 @@ def process_file(
                 header_rows_skipped=_header_rows_skipped,
                 needs_schema_review=True,
                 available_columns=list(df_raw.columns),
+                phase_durations_ms=_phase_durations_ms,
             )
     else:
-        _progress(0.10)
+        _progress(0.10, "classifying")
 
     # I-10: propagate border detection result to schema for persistence
     if _preprocess_info.border_detected and not getattr(doc_schema, 'has_borders', False):
@@ -883,6 +1048,7 @@ def process_file(
         doc_schema.header_sha256 = compute_header_sha256(raw_bytes, filename)
 
     # ── 3-Phase Footer Stripping (post-schema) ─────────────────────────────
+    _progress(0.27, "footer_detection")
     _total_footer_stripped = 0
 
     # Phase 1: Structural filter (always runs — zero cost, no LLM)
@@ -906,7 +1072,7 @@ def process_file(
         if _unmatched and backend is not None:
             try:
                 df_raw, _new_pats, _p2 = strip_footer_phase2_llm(
-                    df_raw, doc_schema, backend,
+                    df_raw, doc_schema, footer_backend,
                     sanitize_config=config.sanitize_config,
                     source_name=filename,
                 )
@@ -935,7 +1101,7 @@ def process_file(
         if backend is not None:
             try:
                 df_raw, _new_pats, _p2 = strip_footer_phase2_llm(
-                    df_raw, doc_schema, backend,
+                    df_raw, doc_schema, footer_backend,
                     sanitize_config=config.sanitize_config,
                     source_name=filename,
                 )
@@ -972,7 +1138,7 @@ def process_file(
     # Apply schema → canonical transactions
     _total_file_rows = len(df_raw)
     transactions, _norm_skipped, _merge_count = _normalize_df_with_schema(df_raw, doc_schema, filename)
-    _progress(0.35)
+    _progress(0.30, "extracting")
 
     # ── Schema auto-invalidation ─────────────────────────────────────────────
     # If a cached schema (Flow 1) produces a catastrophically low parse rate,
@@ -1008,7 +1174,7 @@ def process_file(
         flow_used = "flow2_retry"
         doc_schema = classify_document(
             df_raw=df_raw,
-            llm_backend=backend,
+            llm_backend=classifier_backend,
             source_name=filename,
             sanitize=True,
             sanitize_config=config.sanitize_config,
@@ -1033,6 +1199,7 @@ def process_file(
                 "process_file: Flow 2 retry for %s failed — classify_document returned unusable schema",
                 filename,
             )
+            _finalize_phase_timings()
             return ImportResult(
                 batch_sha256=batch_sha256,
                 source_name=filename,
@@ -1046,6 +1213,7 @@ def process_file(
                 header_rows_skipped=_header_rows_skipped,
                 skipped_rows=_norm_skipped,
                 merged_count=_merge_count,
+                phase_durations_ms=_phase_durations_ms,
             )
 
     # Case 5: remove within-file card balance/totale summary row (double-counting guard)
@@ -1073,6 +1241,7 @@ def process_file(
             logger.info(f"process_file: balance/totale row {action} from {filename}")
 
     if not transactions:
+        _finalize_phase_timings()
         return ImportResult(
             batch_sha256=batch_sha256,
             source_name=filename,
@@ -1086,6 +1255,7 @@ def process_file(
             header_rows_skipped=_header_rows_skipped,
             skipped_rows=_norm_skipped,
             merged_count=_merge_count,
+            phase_durations_ms=_phase_durations_ms,
         )
 
     # ── Per-transaction dedup: filter already-imported rows BEFORE any LLM call ──
@@ -1104,6 +1274,7 @@ def process_file(
             )
         if not transactions:
             logger.info(f"process_file: all transactions already imported for {filename}, skipping")
+            _finalize_phase_timings()
             return ImportResult(
                 batch_sha256=batch_sha256,
                 source_name=filename,
@@ -1117,8 +1288,17 @@ def process_file(
                 header_rows_skipped=_header_rows_skipped,
                 skipped_rows=_norm_skipped,
                 merged_count=_merge_count,
+                phase_durations_ms=_phase_durations_ms,
             )
-    _progress(0.38)
+    _progress(0.35, "cleaning")
+
+    # Map cleaner overall progress (0..1) → file progress (0.35..0.70).
+    # Cleaning occupies ~half of the wall-clock time on local LLMs so it gets
+    # ~35 pp of the bar; the previous 0.38→0.40 slot left the bar frozen
+    # for minutes while the model decoded thousands of structured tokens.
+    def _cleaning_cb(p: float):
+        frac = max(0.0, min(1.0, p))
+        _progress(0.35 + 0.35 * frac, "cleaning")
 
     # ── Description cleaning: extract counterpart name (pre-categorization) ──
     # Sends descriptions to LLM to strip payment-method boilerplate and keep
@@ -1127,12 +1307,16 @@ def process_file(
     # Owner names are replaced with fake but plausible aliases (e.g. "Carlo
     # Brambilla") so the LLM extracts them as real names; aliases are restored
     # to the real owner names after extraction.
+    # AI-90: cleaner has its own backend slot. Falls back to the main
+    # `backend` when `cleaner_llm_backend` is empty (handled by the
+    # `or backend` initialiser above).
     transactions = clean_descriptions_batch(
         transactions,
-        llm_backend=backend,
+        llm_backend=cleaner_backend,
         fallback_backend=fallback,
         source_name=filename,
         sanitize_config=config.sanitize_config,
+        progress_callback=_cleaning_cb,
     )
 
     # Build DataFrame for transfer detection
@@ -1204,8 +1388,8 @@ def process_file(
     to_categorize = tx_df[tx_df["tx_type"].isin(categorizable_types)].to_dict("records")
 
     def _cat_cb(frac: float):
-        # Map categorization progress (0..1) → file progress (0.40..1.0)
-        _progress(0.40 + 0.60 * frac)
+        # Map categorization progress (0..1) → file progress (0.70..1.0)
+        _progress(0.70 + 0.30 * frac, "categorizing")
 
     cat_results = categorize_batch(
         transactions=to_categorize,
@@ -1268,6 +1452,7 @@ def process_file(
             f"applied only in views)"
         )
 
+    _finalize_phase_timings()
     return ImportResult(
         batch_sha256=batch_sha256,
         source_name=filename,
@@ -1282,6 +1467,7 @@ def process_file(
         skipped_rows=_norm_skipped,
         merged_count=_merge_count,
         internal_transfer_count=_giro_count,
+        phase_durations_ms=_phase_durations_ms,
     )
 
 

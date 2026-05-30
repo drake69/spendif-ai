@@ -21,9 +21,11 @@ cat <<'EOF'
   cd $env:USERPROFILE\Desktop\spendif-ai
 
   # 0b. Crea venv e installa dipendenze (Linux/macOS)
-  uv sync
-  # Se hai compilato llama-cpp-python con GPU custom (Vulkan/ROCm):
-  #   usa --skip-sync per non sovrascrivere
+  bash scripts/safe_sync.sh
+  # safe_sync.sh protegge automaticamente i pacchetti in benchmark/.custom_packages
+  # (build custom di llama-cpp-python con Vulkan/ROCm/SSM). In alternativa:
+  #   - bash benchmark/run_benchmark_full.sh --skip-sync   (salta il sync del tutto)
+  #   - uv sync                                            (NON protetto — sovrascrive build custom)
 
   # 0b. Crea venv e installa dipendenze (Windows)
   uv sync

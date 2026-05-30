@@ -1,6 +1,6 @@
 {
-  "categorizer.json": "04cc0b7aa4605c4ddfb1beb5c1cf75dabc044f61c87271aa8cc49c4439b9b65a",
-  "classifier.json": "b91a1375b22a8884230fd8569be89a2a206a8a69bb697b6123b7395a04615c64",
+  "categorizer.json": "d960e6dc9fa71106f630cd61abdfc1316173659f86c61121772c1aa83d751de4",
+  "classifier.json": "10fe24d1ac63aeea548e0830f5d19bb952fddc05ebb787f488f3ac2234172af6",
   "description_cleaner.json": "b1b44e08f4d36aaa0481b6c432febc954b71c72cec9e86ba14f2b7c46b716d0d",
   "footer_detector.json": "ef956ab0d7d6fcdd9c920ef6b46141b471d1c4ba07c84f35f789ee3092512a3c"
 }
