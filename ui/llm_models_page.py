@@ -726,14 +726,17 @@ def _render_download() -> None:
     """
     from pathlib import Path
 
-    from core.llm_backends import LlamaCppBackend
-    from services.llm_service import download_gguf_model, get_default_gguf_models
+    from services.llm_service import (
+        download_gguf_model,
+        get_default_gguf_models,
+        list_local_llama_cpp_models,
+    )
 
     st.markdown(f"**{t('llm_models.download.title')}**")
     st.caption(t("llm_models.download.caption"))
 
     catalog = get_default_gguf_models() or {}
-    local = LlamaCppBackend.list_local_models()
+    local = list_local_llama_cpp_models()
     local_stems = {item["name"] for item in local} if local else set()
     available = {k: v for k, v in catalog.items() if k not in local_stems}
 
