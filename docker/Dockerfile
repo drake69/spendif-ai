@@ -8,7 +8,7 @@
 # `--system-site-packages` against system PyGObject + pycairo, which on
 # Ubuntu 24.04 / Fedora 42 are built against Python 3.12. Keeping the cap
 # aligned across native bundles and the Docker image avoids drift.
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Pull the latest Debian security patches before installing anything else.
 # The base `python:3.13-slim` image is only rebuilt every few weeks, so its
