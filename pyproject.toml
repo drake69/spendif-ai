@@ -5,7 +5,7 @@ description = "Unified personal finance ledger with hybrid LLM pipeline"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Luigi Corsaro" }]
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.12,<3.15"
 dependencies = [
     # Core data
     "pandas>=2.2",

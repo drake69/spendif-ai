@@ -3,15 +3,13 @@
 # Build:  docker build -t spendify .
 # Run:    docker run -p 8501:8501 --env-file .env spendify
 
-# Pinned to 3.13 to match pyproject.toml `requires-python = ">=3.12,<3.14"`.
-# The upper bound exists because the Linux .deb/.rpm bundle uses
-# `--system-site-packages` against system PyGObject + pycairo, which on
-# Ubuntu 24.04 / Fedora 42 are built against Python 3.12. Keeping the cap
-# aligned across native bundles and the Docker image avoids drift.
+# Pinned to 3.14 (matches Dependabot bump 2026-06-22; pyproject.toml upper bound
+# is kept one minor ahead of the pinned image so uv sync can always find an
+# interpreter — change both together when bumping).
 FROM python:3.14-slim
 
 # Pull the latest Debian security patches before installing anything else.
-# The base `python:3.13-slim` image is only rebuilt every few weeks, so its
+# The base `python:3.14-slim` image is only rebuilt every few weeks, so its
 # system packages routinely lag behind upstream CVE fixes (Trivy was flagging
 # HIGH severity findings on libcap2 / libsystemd0 / libldap-common despite
 # Debian having published the patches already). Running `apt-get upgrade`
