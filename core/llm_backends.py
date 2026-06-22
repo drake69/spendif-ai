@@ -714,7 +714,7 @@ DEFAULT_GGUF_MODELS = {
     "Qwen2.5-7B-Instruct-Q4_K_M": {
         "url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         "size_gb": 4.7,
-        "description": "Qwen 2.5 7B — Transformer puro, supportato da llama.cpp 0.3.x. Categorizer 17.8% exact (n=9). Alternative al 9B per chi non puo' usare l'architettura ibrida.",
+        "description": "Qwen 2.5 7B — Transformer puro, carica senza SSM build. Miglior alternativa affidabile al 9B (benchmark categorizer n=9).",
     },
     "Qwen3.5-2B-Q4_K_M": {
         "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
@@ -729,12 +729,12 @@ DEFAULT_GGUF_MODELS = {
     "Qwen_Qwen3.5-9B-Q3_K_M": {
         "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/main/Qwen_Qwen3.5-9B-Q3_K_M.gguf",
         "size_gb": 5.0,
-        "description": "Qwen 3.5 9B Q3 — categorizer leader nei benchmark (42.3% exact, n=125)",
+        "description": "⚠ Quant difettosa (bartowski): metadata qwen35/SSM presenti ma pesi mancanti — non carica. Attendere re-quant. Categorizer leader (42.3% exact, n=125) quando funzionante.",
     },
     "Qwen_Qwen3.5-9B-Q4_K_M": {
         "url": "https://huggingface.co/bartowski/Qwen_Qwen3.5-9B-GGUF/resolve/main/Qwen_Qwen3.5-9B-Q4_K_M.gguf",
         "size_gb": 5.6,
-        "description": "Qwen 3.5 9B Q4 — variante più pesante (36.8% exact, 56.6% fuzzy, n=108)",
+        "description": "⚠ Quant difettosa (bartowski): metadata qwen35/SSM presenti ma pesi mancanti — non carica. Attendere re-quant. Variante Q4 (36.8% exact, 56.6% fuzzy, n=108).",
     },
 }
 

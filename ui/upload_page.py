@@ -418,6 +418,9 @@ def render_upload_page(engine):
     import_svc = ImportService(engine)
     cfg_svc    = SettingsService(engine)
 
+    if cfg_svc.get("import_test_mode", "false").lower() == "true":
+        st.error(t_fn("upload.test_mode_banner"))
+
     # Guard: owner names must be configured before any import
     if not import_svc.get_owner_names():
         st.error(t_fn("upload.owner_names_missing"))

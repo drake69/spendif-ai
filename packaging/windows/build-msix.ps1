@@ -25,10 +25,17 @@
 .PARAMETER SkipPyInstaller
     Reuse existing dist\SpendifAi\ instead of rebuilding.
 
+.PARAMETER WithSSM
+    Compile llama-cpp-python from git HEAD with CUDA support before running
+    PyInstaller, so the bundle contains an SSM-capable llama.cpp (required
+    for Qwen 3.5 9B and other SSM-hybrid-architecture models).
+    Requires VS Build Tools + C++ workload; NVIDIA CUDA Toolkit for GPU.
+
 .EXAMPLE
     cd sw_artifacts
     .\packaging\windows\build-msix.ps1
     .\packaging\windows\build-msix.ps1 -Version 3.1.0.0 -Publisher "CN=Luigi Corsaro, O=Spendif.ai, C=IT"
+    .\packaging\windows\build-msix.ps1 -WithSSM
 
 .NOTES
     Requires Windows SDK (for makeappx.exe). Install via:
@@ -44,7 +51,8 @@ param(
     [string]$PublisherDisplay = "Spendif.ai",
     [ValidateSet("x64", "arm64", "neutral")]
     [string]$Architecture = "x64",
-    [switch]$SkipPyInstaller
+    [switch]$SkipPyInstaller,
+    [switch]$WithSSM
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +71,25 @@ $parts = $Version.Split('.')
 while ($parts.Count -lt 4) { $parts += "0" }
 $Version4 = ($parts[0..3] -join '.')
 Write-Host "▸ Spendif.ai MSIX builder — version $Version4 ($Architecture)"
+
+# ── 1b. SSM build (optional) ─────────────────────────────────────────────────
+# Compiles llama-cpp-python from git HEAD with CUDA support so PyInstaller
+# bundles an SSM-capable llama.cpp (required for Qwen 3.5 9B).
+if ($WithSSM) {
+    Write-Host "▸ Building llama-cpp-python with SSM support (CUDA)..."
+    & "$PSScriptRoot\..\..\scripts\setup-ssm.ps1" -Yes
+    if ($LASTEXITCODE -ne 0) { throw "SSM build failed — check VS Build Tools and CUDA Toolkit" }
+    Write-Host "✔ SSM build complete"
+}
+
+# ── 1c. Stamp build info ─────────────────────────────────────────────────────
+$BuildTs = (Get-Date -Format "yyyy-MM-dd HH:mm")
+@"
+# Generated at build time — do not edit manually.
+BUILD_TIME = "$BuildTs"
+BUILD_VERSION = "$Version4"
+"@ | Set-Content -Path "core\_build_info.py" -Encoding UTF8
+Write-Host "▸ Build stamp: v$Version4 @ $BuildTs"
 
 # ── 2. PyInstaller ───────────────────────────────────────────────────────────
 $AppRoot = "dist\SpendifAi"
