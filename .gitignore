@@ -60,3 +60,6 @@ nsi/
 
 # Local symlink to documents repo (never commit)
 rsvd_docs
+
+# .sestante/ — backlog locale, mai committato
+.sestante/
