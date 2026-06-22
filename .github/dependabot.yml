@@ -31,3 +31,8 @@ updates:
     commit-message:
       prefix: "chore(docker)"
     open-pull-requests-limit: 3
+    ignore:
+      # llama-cpp-python wheels are not yet available for Python 3.14;
+      # source build fails at link stage. Remove ignore when 3.14 wheels ship.
+      - dependency-name: "python"
+        versions: ["3.14.*", "3.15.*"]

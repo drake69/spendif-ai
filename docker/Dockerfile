@@ -3,13 +3,13 @@
 # Build:  docker build -t spendify .
 # Run:    docker run -p 8501:8501 --env-file .env spendify
 
-# Pinned to 3.14 (matches Dependabot bump 2026-06-22; pyproject.toml upper bound
-# is kept one minor ahead of the pinned image so uv sync can always find an
-# interpreter — change both together when bumping).
-FROM python:3.14-slim
+# Pinned to 3.13: llama-cpp-python wheels are not yet available for Python 3.14
+# (source build fails at link stage for llama-llava-cli / llama-gemma3-cli).
+# Unpin when llama-cpp-python publishes 3.14 wheels or fixes the CMake build.
+FROM python:3.13-slim
 
 # Pull the latest Debian security patches before installing anything else.
-# The base `python:3.14-slim` image is only rebuilt every few weeks, so its
+# The base `python:3.13-slim` image is only rebuilt every few weeks, so its
 # system packages routinely lag behind upstream CVE fixes (Trivy was flagging
 # HIGH severity findings on libcap2 / libsystemd0 / libldap-common despite
 # Debian having published the patches already). Running `apt-get upgrade`
