@@ -42,7 +42,10 @@ models:
     params: "7B"
     quant: Q4_K_M
     filename: Qwen2.5-7B-Instruct-Q4_K_M.gguf
-    repo: Qwen/Qwen2.5-7B-Instruct-GGUF
+    # Qwen/Qwen2.5-7B-Instruct-GGUF only ships split GGUFs (00001-of-00002);
+    # bartowski mirrors the same model as a single file, which hf_hub_download
+    # handles without multi-part logic (closes 404 on F&F gate check 2026-06-22).
+    repo: bartowski/Qwen2.5-7B-Instruct-GGUF
     size_mb: 4700
     ram_min_gb: 12
     tier: advanced
