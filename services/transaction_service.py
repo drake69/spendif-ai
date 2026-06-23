@@ -56,11 +56,19 @@ class TransactionService:
                 .all()
             )
 
-    def update_category(self, tx_id: str, category: str, subcategory: str) -> bool:
+    def update_category(
+        self, tx_id: str, category: str, subcategory: str, origin: str = "unknown"
+    ) -> bool:
         with self._session() as s:
-            result = repository.update_transaction_category(s, tx_id, category, subcategory)
+            result = repository.update_transaction_category(
+                s, tx_id, category, subcategory, origin=origin
+            )
             s.commit()
             return result
+
+    def get_correction_benchmark(self) -> list[dict]:
+        with self._session() as s:
+            return repository.get_correction_benchmark(s)
 
     def update_context(self, tx_id: str, context: str | None) -> bool:
         with self._session() as s:
@@ -289,6 +297,12 @@ class TransactionService:
                     updated += 1
             s.commit()
             return updated
+
+    def get_counterpart_stats(
+        self, tx_types: tuple[str, ...] = ("expense", "income")
+    ) -> list[dict]:
+        with self._session() as s:
+            return repository.get_counterpart_stats(s, tx_types=tx_types)
 
     def delete_duplicate_groups(self, groups: list[list]) -> int:
         """Delete all but the first transaction in each duplicate group.
