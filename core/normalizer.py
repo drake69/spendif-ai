@@ -632,7 +632,10 @@ def apply_sign_convention(
     elif convention == SignConvention.debit_positive:
         debit = parse_amount(row.get(debit_col)) if debit_col else None
         credit = parse_amount(row.get(credit_col)) if credit_col else None
-        # If neither column parsed, fall back to amount_col (schema may have mismapped)
+        # S4 (AI-149): no debit/credit columns → this is really a single signed
+        # column. Return the amount as-is (signed_single semantics); invert_sign is
+        # applied separately by the caller. The classifier now forces signed_single
+        # in this case (S3), so reaching here means a stale/mismapped schema.
         if debit is None and credit is None:
             return parse_amount(row.get(amount_col)) if amount_col else None
         # Use abs() so the result is correct whether the bank stores values as
