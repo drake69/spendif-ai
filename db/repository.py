@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from core.categorizer import CategoryRule as CoreCategoryRule
 from core.schemas import DocumentSchema
 from db.models import (
+    CategoryCorrection,
     CategoryRule,
     DEFAULT_USER_SETTINGS,
     DescriptionRule,
@@ -288,7 +289,7 @@ def upsert_transaction(session: Session, tx: dict, batch_id: Optional[int] = Non
         date_accounting=tx.get("date_accounting").isoformat() if tx.get("date_accounting") and hasattr(tx["date_accounting"], "isoformat") else tx.get("date_accounting"),
         amount=amount_val,
         currency=tx.get("currency", "EUR"),
-        description=tx.get("description", ""),
+        description=(tx.get("description") or "").strip().upper() or None,
         source_file=tx.get("source_file", ""),
         doc_type=tx.get("doc_type", ""),
         account_label=tx.get("account_label", ""),
@@ -318,16 +319,57 @@ def get_existing_tx_ids(session: Session, tx_ids: list[str]) -> set[str]:
     return {row.id for row in rows}
 
 
+def _compute_consistency(session: Session, description: str) -> float | None:
+    """% of categorized transactions with same description that agree on modal category."""
+    from collections import Counter
+    rows = (
+        session.query(Transaction.category)
+        .filter(
+            Transaction.description == description,
+            Transaction.category.isnot(None),
+        )
+        .all()
+    )
+    if not rows:
+        return None
+    counts = Counter(r[0] for r in rows)
+    modal_count = counts.most_common(1)[0][1]
+    return round(modal_count / len(rows) * 100, 1)
+
+
 def update_transaction_category(
     session: Session,
     tx_id: str,
     category: str,
     subcategory: str,
+    origin: str = "unknown",
 ) -> bool:
     from datetime import datetime, timezone
     tx = session.get(Transaction, tx_id)
     if tx is None:
         return False
+    old_cat = tx.category
+    old_sub = tx.subcategory
+    old_src = tx.category_source
+    old_model = tx.category_model
+    old_conf = tx.category_confidence
+    category_changed = old_cat != category or old_sub != subcategory
+    if category_changed and old_src in ("llm", "rule", "history"):
+        consistency = _compute_consistency(session, tx.description or "")
+        correction = CategoryCorrection(
+            tx_id=tx_id,
+            original_category=old_cat,
+            original_subcategory=old_sub,
+            original_source=old_src,
+            original_model=old_model,
+            original_confidence=old_conf,
+            new_category=category,
+            new_subcategory=subcategory,
+            consistency_at_correction=consistency,
+            correction_origin=origin,
+            corrected_at=datetime.now(timezone.utc),
+        )
+        session.add(correction)
     tx.category = category
     tx.subcategory = subcategory
     tx.category_confidence = "high"
@@ -337,6 +379,66 @@ def update_transaction_category(
     tx.human_validated = True
     tx.validated_at = datetime.now(timezone.utc)
     return True
+
+
+def get_correction_benchmark(session: Session) -> list[dict]:
+    """Live implicit benchmark: per-model corrections vs total LLM categorizations.
+
+    Returns one dict per model with:
+      model, total_categorized, total_corrections, implicit_accuracy,
+      high_conf_errors, avg_consistency_at_error
+    """
+    from collections import Counter, defaultdict
+
+    # Still-LLM categorizations (not yet corrected by user)
+    still_llm_rows = (
+        session.query(Transaction.category_model)
+        .filter(
+            Transaction.category_source == "llm",
+            Transaction.category_model.isnot(None),
+        )
+        .all()
+    )
+    total_by_model: Counter = Counter(r[0] for r in still_llm_rows)
+
+    # Corrections where original source was llm
+    corr_rows = (
+        session.query(CategoryCorrection)
+        .filter(CategoryCorrection.original_source == "llm")
+        .all()
+    )
+
+    corrections: dict[str, list] = defaultdict(list)
+    for c in corr_rows:
+        if c.original_model:
+            corrections[c.original_model].append(c)
+
+    all_models = set(total_by_model.keys()) | set(corrections.keys())
+    results = []
+    for model in sorted(all_models):
+        corr_list = corrections.get(model, [])
+        n_corr = len(corr_list)
+        # total = still-LLM + already-corrected (corrected txs left the 'llm' source)
+        n_total = total_by_model.get(model, 0) + n_corr
+        high_conf = sum(1 for c in corr_list if c.original_confidence == "high")
+        consistency_vals = [
+            c.consistency_at_correction
+            for c in corr_list
+            if c.consistency_at_correction is not None
+        ]
+        avg_cons = round(sum(consistency_vals) / len(consistency_vals), 1) if consistency_vals else None
+        implicit_acc = round((1 - n_corr / n_total) * 100, 1) if n_total > 0 else None
+        results.append(
+            {
+                "model": model,
+                "total_categorized": n_total,
+                "total_corrections": n_corr,
+                "implicit_accuracy": implicit_acc,
+                "high_conf_errors": high_conf,
+                "avg_consistency_at_error": avg_cons,
+            }
+        )
+    return results
 
 
 def toggle_transaction_giroconto(session: Session, tx_id: str) -> tuple[bool, str]:
@@ -655,11 +757,26 @@ def create_category_rule(
 
     Returns (rule, created) where created=False means an existing rule was updated.
     """
-    existing = (
-        session.query(CategoryRule)
-        .filter(CategoryRule.pattern == pattern, CategoryRule.match_type == match_type)
-        .first()
-    )
+    # Pattern is stored verbatim (matching is case-insensitive at compare time:
+    # see categorizer.matches / get_transactions_by_rule_pattern). The upsert
+    # lookup is case-insensitive for contains/exact so "coop"/"COOP" dedup to one.
+    from sqlalchemy import func
+
+    if match_type in ("contains", "exact"):
+        existing = (
+            session.query(CategoryRule)
+            .filter(
+                func.upper(CategoryRule.pattern) == pattern.upper(),
+                CategoryRule.match_type == match_type,
+            )
+            .first()
+        )
+    else:
+        existing = (
+            session.query(CategoryRule)
+            .filter(CategoryRule.pattern == pattern, CategoryRule.match_type == match_type)
+            .first()
+        )
     if existing is not None:
         existing.category = category
         existing.subcategory = subcategory
@@ -696,6 +813,7 @@ def update_category_rule(
     if rule is None:
         return False
     if pattern is not None:
+        # Stored verbatim; rule matching is case-insensitive at compare time.
         rule.pattern = pattern
     if match_type is not None:
         rule.match_type = match_type
@@ -1908,3 +2026,87 @@ def get_adaptive_n_ctx_cap(
     # Round up to next 1024 multiple, enforce floor of 2048
     cap = max(int(math.ceil(max_upper / 1024)) * 1024, 2048)
     return cap
+
+
+def get_counterpart_stats(
+    session: Session,
+    tx_types: tuple[str, ...] = ("expense", "income"),
+) -> list[dict]:
+    """Aggregate transactions by description to produce per-counterpart stats.
+
+    Returns a list of dicts with keys:
+      description, tx_count, avg_amount, modal_category, modal_subcategory,
+      variability_pct, source_mode, human_checked
+    """
+    from collections import Counter, defaultdict
+
+    rows = (
+        session.query(
+            Transaction.description,
+            Transaction.amount,
+            Transaction.category,
+            Transaction.subcategory,
+            Transaction.category_source,
+            Transaction.validated_at,
+        )
+        .filter(
+            Transaction.description.isnot(None),
+            Transaction.description != "",
+            Transaction.tx_type.in_(tx_types),
+        )
+        .all()
+    )
+
+    # Group case-insensitively so "Coop"/"COOP" collapse into one counterpart,
+    # regardless of how the description casing was stored. The first-seen
+    # original casing is kept for display.
+    groups: dict[str, list] = defaultdict(list)
+    display: dict[str, str] = {}
+    for row in rows:
+        key = (row.description or "").upper()
+        groups[key].append(row)
+        display.setdefault(key, row.description)
+
+    stats = []
+    for key, txs in groups.items():
+        desc = display[key]
+        tx_count = len(txs)
+        avg_amount = sum(abs(float(t.amount or 0)) for t in txs) / tx_count
+
+        cat_counts: Counter = Counter(t.category for t in txs if t.category)
+        if cat_counts:
+            modal_cat, modal_count = cat_counts.most_common(1)[0]
+        else:
+            modal_cat, modal_count = "", 0
+        sub_counts: Counter = Counter(
+            t.subcategory for t in txs if t.category == modal_cat and t.subcategory
+        )
+        modal_sub = sub_counts.most_common(1)[0][0] if sub_counts else ""
+        variability_pct = (modal_count / tx_count * 100) if tx_count else 0.0
+
+        sources = {t.category_source for t in txs if t.category_source}
+        if len(sources) == 1:
+            source_mode = next(iter(sources))
+        elif sources:
+            source_mode = "mixed"
+        else:
+            source_mode = "unknown"
+
+        human_checked = any(
+            t.validated_at is not None or t.category_source == "manual" for t in txs
+        )
+
+        stats.append(
+            {
+                "description": desc,
+                "tx_count": tx_count,
+                "avg_amount": avg_amount,
+                "modal_category": modal_cat,
+                "modal_subcategory": modal_sub,
+                "variability_pct": variability_pct,
+                "source_mode": source_mode,
+                "human_checked": human_checked,
+            }
+        )
+
+    return stats

@@ -11,6 +11,7 @@ Pages:
   📊 Budget vs Actual   – compare actual spending vs budget targets
   🔍 Review             – manual review of low-confidence items
   📏 Rules              – manage category rules (edit / delete / create)
+  🏪 Counterparts       – per-vendor stats grid with inline rule creation
   🗂️ Taxonomy           – manage categories and subcategories
   ⚙️ Settings           – locale, language, LLM backend preferences
   ✅ Checklist          – monthly tx presence per account (pivot table)
@@ -198,6 +199,10 @@ elif page == "review":
 elif page == "rules":
     from ui.rules_page import render_rules_page
     render_rules_page(engine)
+
+elif page == "counterparts":
+    from ui.counterparts_page import render_counterparts_page
+    render_counterparts_page(engine)
 
 elif page == "taxonomy":
     from ui.taxonomy_page import render_taxonomy_page

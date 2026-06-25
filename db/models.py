@@ -226,6 +226,7 @@ def create_tables(engine=None):
     _migrate_add_nsi_tag_mapping(engine)
     _migrate_add_category_model(engine)
     _migrate_add_llm_usage_log(engine)
+    _migrate_add_category_correction(engine)
     _migrate_set_onboarding_done_for_existing_users(engine)  # must run last
     _migrate_purge_orphan_schemas(engine)  # cleanup: remove schemas without header_sha256
 
@@ -581,6 +582,34 @@ class NsiTagMapping(Base):
     subcategory = Column(String(128), nullable=False)
     taxonomy_hash = Column(String(64), nullable=False)  # SHA-256 of taxonomy at build time
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class CategoryCorrection(Base):
+    """User correction log — one row every time the user changes a category.
+
+    Captures the original LLM/rule assignment alongside two quality signals:
+      - original_confidence: the model's self-reported certainty on that tx
+      - consistency_at_correction: % of same-description txs that agreed on
+        the same category at the moment of correction (vendor-level coherence)
+
+    Together these let us compute a live implicit benchmark:
+      accuracy ≈ 1 - (corrections / total_llm_categorizations)  per model
+    and diagnose failure modes (high-confidence errors, inconsistent vendors).
+    """
+    __tablename__ = "category_correction"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tx_id = Column(String(64), nullable=False, index=True)
+    original_category = Column(String(128))
+    original_subcategory = Column(String(128))
+    original_source = Column(String(10))        # llm | rule | history
+    original_model = Column(String(128))        # category_model at correction time
+    original_confidence = Column(String(10))    # high | medium | low
+    new_category = Column(String(128))
+    new_subcategory = Column(String(128))
+    consistency_at_correction = Column(Float, nullable=True)  # % modal cat, same description
+    correction_origin = Column(String(20))      # ledger | counterparts | review | bulk_edit
+    corrected_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 def _migrate_add_import_job(engine) -> None:
@@ -1124,6 +1153,32 @@ def _migrate_add_category_model(engine) -> None:
                 pass
             else:
                 raise
+
+
+def _migrate_add_category_correction(engine) -> None:
+    """Create category_correction table for live implicit benchmark (idempotent)."""
+    from sqlalchemy import text as _text
+    with engine.connect() as conn:
+        conn.execute(_text(
+            'CREATE TABLE IF NOT EXISTS category_correction ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'tx_id VARCHAR(64) NOT NULL, '
+            'original_category VARCHAR(128), '
+            'original_subcategory VARCHAR(128), '
+            'original_source VARCHAR(10), '
+            'original_model VARCHAR(128), '
+            'original_confidence VARCHAR(10), '
+            'new_category VARCHAR(128), '
+            'new_subcategory VARCHAR(128), '
+            'consistency_at_correction FLOAT, '
+            'correction_origin VARCHAR(20), '
+            'corrected_at DATETIME)'
+        ))
+        conn.execute(_text(
+            'CREATE INDEX IF NOT EXISTS ix_category_correction_tx_id '
+            'ON category_correction (tx_id)'
+        ))
+        conn.commit()
 
 
 def _migrate_add_llm_usage_log(engine) -> None:

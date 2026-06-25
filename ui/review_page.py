@@ -300,7 +300,7 @@ def render_review_page(engine):
             review_retroactive = False
 
         if st.button(t("review.apply_btn"), type="primary"):
-            ok = tx_svc.update_category(selected_tx.id, new_cat, new_sub)
+            ok = tx_svc.update_category(selected_tx.id, new_cat, new_sub, origin="review")
             if ok:
                 rule_msg = ""
                 if save_rule and selected_tx.description:
@@ -321,7 +321,7 @@ def render_review_page(engine):
                         n_similar = 0
                         for stx in similar:
                             if stx.id != selected_tx.id:
-                                tx_svc.update_category(stx.id, new_cat, new_sub)
+                                tx_svc.update_category(stx.id, new_cat, new_sub, origin="review")
                                 n_similar += 1
                         if n_similar:
                             rule_msg += f" · {n_similar} transazioni simili aggiornate."

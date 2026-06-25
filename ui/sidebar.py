@@ -16,6 +16,7 @@ _NAV_KEYS = [
     ("budget_vs_actual","budget_vs_actual"),
     ("review",          "review"),
     ("rules",           "rules"),
+    ("counterparts",    "counterparts"),
     ("taxonomy",        "taxonomy"),
     ("llm_models",      "llm_models"),
     ("settings",        "settings"),

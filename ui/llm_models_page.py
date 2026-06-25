@@ -621,9 +621,61 @@ def render_llm_models_page(engine) -> None:
     st.subheader(t("llm_models.operations.title"))
     _render_stats_7d(engine)
     st.divider()
+    _render_correction_benchmark(engine)
+    st.divider()
     _render_calibrate_stub()
     st.divider()
     _render_download()
+
+
+def _render_correction_benchmark(engine) -> None:
+    """Live implicit benchmark derived from user category corrections."""
+    import pandas as pd
+    from db import repository
+    from sqlalchemy.orm import sessionmaker
+
+    st.markdown(f"**{t('llm_models.benchmark.title')}**")
+    st.caption(t("llm_models.benchmark.caption"))
+
+    try:
+        _Session = sessionmaker(bind=engine, expire_on_commit=False)
+        s = _Session()
+        try:
+            rows = repository.get_correction_benchmark(s)
+        finally:
+            s.close()
+    except Exception:
+        st.caption(t("llm_models.benchmark.unavailable"))
+        return
+
+    if not rows:
+        st.caption(t("llm_models.benchmark.empty"))
+        return
+
+    df = pd.DataFrame(rows)
+    df.rename(columns={
+        "model": t("llm_models.benchmark.col_model"),
+        "total_categorized": t("llm_models.benchmark.col_total"),
+        "total_corrections": t("llm_models.benchmark.col_corrections"),
+        "implicit_accuracy": t("llm_models.benchmark.col_accuracy"),
+        "high_conf_errors": t("llm_models.benchmark.col_hce"),
+        "avg_consistency_at_error": t("llm_models.benchmark.col_consistency"),
+    }, inplace=True)
+
+    col_acc = t("llm_models.benchmark.col_accuracy")
+    col_cons = t("llm_models.benchmark.col_consistency")
+
+    st.dataframe(
+        df.style.format(
+            {
+                col_acc: lambda v: f"{v:.1f}%" if v is not None else "—",
+                col_cons: lambda v: f"{v:.1f}%" if v is not None else "—",
+            }
+        ).background_gradient(subset=[col_acc], cmap="RdYlGn", vmin=0, vmax=100),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption(t("llm_models.benchmark.note"))
 
 
 def _render_stats_7d(engine) -> None:

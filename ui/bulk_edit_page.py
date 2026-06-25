@@ -327,7 +327,7 @@ def render_bulk_edit_page(engine):
             )
 
         if st.button(t("bulk_edit.apply_category_btn"), type="primary", key="bulk_cat_save"):
-            ok = tx_svc.update_category(sel.id, new_cat, new_sub)
+            ok = tx_svc.update_category(sel.id, new_cat, new_sub, origin="bulk_edit")
             if ok:
                 rule_msg = ""
                 n_similar = 0
@@ -346,7 +346,7 @@ def render_bulk_edit_page(engine):
                     similar = tx_svc.get_by_rule_pattern(sel.description, "contains")
                     for stx in similar:
                         if stx.id != sel.id:
-                            tx_svc.update_category(stx.id, new_cat, new_sub)
+                            tx_svc.update_category(stx.id, new_cat, new_sub, origin="bulk_edit")
                             n_similar += 1
                     if n_similar:
                         rule_msg += t("bulk_edit.similar_tx_updated", n=n_similar)

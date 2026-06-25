@@ -373,7 +373,7 @@ def render_registry_page(engine):
                         f"a «{_new_cat}». Sottocategorie valide: {', '.join(_valid_subs)}"
                     )
                     continue
-                tx_svc.update_category(tx_id, _new_cat, _new_sub)
+                tx_svc.update_category(tx_id, _new_cat, _new_sub, origin="ledger")
                 n_cat += 1
                 _desc = str(orig["Descrizione"]).strip()
                 if _desc:
