@@ -71,18 +71,20 @@ def _model_picker(
     from pathlib import Path
 
     if backend == "local_llama_cpp":
-        from services.llm_service import list_local_llama_cpp_models
-        models = list_local_llama_cpp_models() or []
-        # Each entry is {"name": stem, "path": full_path, "size_gb": ...}
-        options_paths = [m["path"] for m in models]
-        labels = {
-            m["path"]: (
-                f"{m['name']} ({m['size_gb']} GB)"
-                if isinstance(m.get("size_gb"), (int, float))
-                else m["name"]
-            )
-            for m in models
-        }
+        from services.llm_service import get_gguf_catalog
+        catalog = get_gguf_catalog()
+        # Picker: all catalog models, downloaded ones selectable, others labelled ⬇
+        options_paths: list[str] = []
+        labels: dict[str, str] = {}
+        for m in catalog:
+            # Use local path for downloaded models; catalog name as placeholder otherwise
+            key = m.local_path if m.downloaded else m.name
+            options_paths.append(key)
+            size = m.local_size_gb if m.local_size_gb is not None else m.size_gb
+            if m.downloaded:
+                labels[key] = f"✓ {m.name} ({size} GB)"
+            else:
+                labels[key] = f"⬇ {m.name} ({size} GB) — da scaricare"
         return _selectbox_or_custom(
             options=options_paths,
             current=current_value,
@@ -726,52 +728,47 @@ def _render_download() -> None:
     """
     from pathlib import Path
 
-    from services.llm_service import (
-        download_gguf_model,
-        get_default_gguf_models,
-        list_local_llama_cpp_models,
-    )
+    from services.llm_service import download_gguf_model
 
     st.markdown(f"**{t('llm_models.download.title')}**")
     st.caption(t("llm_models.download.caption"))
 
-    catalog = get_default_gguf_models() or {}
-    local = list_local_llama_cpp_models()
-    local_stems = {item["name"] for item in local} if local else set()
-    available = {k: v for k, v in catalog.items() if k not in local_stems}
+    from services.llm_service import get_gguf_catalog
+    all_models = get_gguf_catalog()
+    to_download = [m for m in all_models if not m.downloaded]
 
-    if not available:
+    if not to_download:
         st.success(t("llm_models.download.all_present"))
-        # Still surface what's installed, for orientation.
-        if local:
-            with st.expander(t("llm_models.download.installed_label"), expanded=False):
-                for item in local:
-                    size_gb = item.get("size_gb")
-                    size_label = (
-                        f"({size_gb} GB)"
-                        if isinstance(size_gb, (int, float))
-                        else ""
-                    )
-                    st.markdown(f"- `{item['name']}` {size_label}")
+
+    # Always show full catalog with download status
+    with st.expander(t("llm_models.download.installed_label"), expanded=not to_download):
+        for m in all_models:
+            size = m.local_size_gb if m.local_size_gb is not None else m.size_gb
+            icon = "✓" if m.downloaded else "⬇"
+            st.markdown(f"- {icon} `{m.name}` ({size} GB)")
+
+    if not to_download:
         return
 
-    options = list(available.keys())
+    options = [m.name for m in to_download]
     sel = st.selectbox(
         t("llm_models.download.choose"),
         options=options,
-        format_func=lambda k: f"{k} — {available[k].get('size_gb', '?')} GB",
+        format_func=lambda k: next(
+            f"{m.name} — {m.size_gb} GB" for m in to_download if m.name == k
+        ),
         key="_llmpage_dl_choice",
     )
-    if sel:
-        st.caption(available[sel].get("description", ""))
+    sel_model = next((m for m in to_download if m.name == sel), None)
+    if sel_model:
+        st.caption(sel_model.description)
 
     if st.button(
         t("llm_models.download.btn"),
         type="primary",
         key="_llmpage_dl_btn",
     ):
-        url = available[sel]["url"]
-        # Save under ~/.spendifai/models/<stem>.gguf (mirrors registry naming).
+        url = sel_model.url
         dest = str(Path.home() / ".spendifai" / "models" / f"{sel}.gguf")
         prog = st.progress(0.0)
         status = st.empty()

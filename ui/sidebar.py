@@ -53,6 +53,7 @@ def render_sidebar() -> str:
             if st.button(t("sidebar.nav_stay"), key="nav_cancel_interrupt"):
                 st.rerun()
         # While confirmation is pending, still show nav but don't process clicks
+        _render_build_info()
         return st.session_state["page"]
 
     for nav_suffix, key in _NAV_KEYS:
@@ -71,4 +72,19 @@ def render_sidebar() -> str:
                 st.session_state["page"] = key
                 st.rerun()
 
+    _render_build_info()
     return st.session_state["page"]
+
+
+def _render_build_info() -> None:
+    try:
+        from core._build_info import BUILD_TIME, BUILD_VERSION
+    except ImportError:
+        BUILD_TIME, BUILD_VERSION = "dev", "dev"
+    if BUILD_TIME == "dev":
+        return
+    st.sidebar.markdown(
+        f"<div style='text-align:center;color:#666;font-size:11px;margin-top:8px'>"
+        f"v{BUILD_VERSION} · {BUILD_TIME}</div>",
+        unsafe_allow_html=True,
+    )
