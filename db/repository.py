@@ -757,15 +757,26 @@ def create_category_rule(
 
     Returns (rule, created) where created=False means an existing rule was updated.
     """
-    # Normalize pattern casing: contains/exact match against uppercase descriptions
-    if match_type in ("contains", "exact"):
-        pattern = pattern.upper()
+    # Pattern is stored verbatim (matching is case-insensitive at compare time:
+    # see categorizer.matches / get_transactions_by_rule_pattern). The upsert
+    # lookup is case-insensitive for contains/exact so "coop"/"COOP" dedup to one.
+    from sqlalchemy import func
 
-    existing = (
-        session.query(CategoryRule)
-        .filter(CategoryRule.pattern == pattern, CategoryRule.match_type == match_type)
-        .first()
-    )
+    if match_type in ("contains", "exact"):
+        existing = (
+            session.query(CategoryRule)
+            .filter(
+                func.upper(CategoryRule.pattern) == pattern.upper(),
+                CategoryRule.match_type == match_type,
+            )
+            .first()
+        )
+    else:
+        existing = (
+            session.query(CategoryRule)
+            .filter(CategoryRule.pattern == pattern, CategoryRule.match_type == match_type)
+            .first()
+        )
     if existing is not None:
         existing.category = category
         existing.subcategory = subcategory
@@ -802,8 +813,8 @@ def update_category_rule(
     if rule is None:
         return False
     if pattern is not None:
-        _mt = match_type or rule.match_type
-        rule.pattern = pattern.upper() if _mt in ("contains", "exact") else pattern
+        # Stored verbatim; rule matching is case-insensitive at compare time.
+        rule.pattern = pattern
     if match_type is not None:
         rule.match_type = match_type
     if category is not None:
@@ -2046,12 +2057,19 @@ def get_counterpart_stats(
         .all()
     )
 
+    # Group case-insensitively so "Coop"/"COOP" collapse into one counterpart,
+    # regardless of how the description casing was stored. The first-seen
+    # original casing is kept for display.
     groups: dict[str, list] = defaultdict(list)
+    display: dict[str, str] = {}
     for row in rows:
-        groups[row.description].append(row)
+        key = (row.description or "").upper()
+        groups[key].append(row)
+        display.setdefault(key, row.description)
 
     stats = []
-    for desc, txs in groups.items():
+    for key, txs in groups.items():
+        desc = display[key]
         tx_count = len(txs)
         avg_amount = sum(abs(float(t.amount or 0)) for t in txs) / tx_count
 
