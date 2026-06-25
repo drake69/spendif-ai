@@ -22,6 +22,9 @@ secrets/
 *.pem
 *.key
 
+# Coding agent working files (never commit)
+.coding_agent/
+
 # OS artifacts
 .DS_Store
 Thumbs.db

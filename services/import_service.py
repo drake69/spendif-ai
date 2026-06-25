@@ -225,12 +225,23 @@ class ImportService:
         progress_callback=None,
         account_label_override: str | None = None,
         skip_rows_override: int | None = None,
+        account_type_override: str | None = None,
+        existing_tx_ids_checker=None,
+        llm_trace: list | None = None,
     ) -> ImportResult:
         """Run the full import pipeline for one file.
 
         Taxonomy and category rules are loaded from the DB internally.
         Duplicate detection uses a per-call session so no open session is needed
         from the caller.
+
+        AI-193 (dev Debugger) hooks, all optional and no-ops in normal imports:
+          account_type_override: force the account_type, bypassing the Account
+            lookup (reproduce AI-149 across account types on the same file).
+          existing_tx_ids_checker: override the duplicate checker — pass
+            ``lambda ids: set()`` to keep every sampled row (nothing pre-skipped).
+          llm_trace: sink list that collects the raw LLM prompt/response of each
+            phase (classify/cleaner/categorizer/footer).
         """
         nsi_svc = NsiTaxonomyService(self.engine)
         with self._session() as s:
@@ -254,11 +265,13 @@ class ImportService:
             user_rules=user_rules,
             known_schema=known_schema,
             progress_callback=progress_callback,
-            existing_tx_ids_checker=_existing_checker,
+            existing_tx_ids_checker=existing_tx_ids_checker or _existing_checker,
             account_label_override=account_label_override,
             skip_rows_override=skip_rows_override,
             history_cache=history_cache,
             taxonomy_map=taxonomy_map,
+            account_type_override=account_type_override,
+            llm_trace=llm_trace,
         )
 
     # ── Full-batch import (legacy) ─────────────────────────────────────────────

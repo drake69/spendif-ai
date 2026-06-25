@@ -52,6 +52,11 @@ if _prompt_errors:
 DB_URL = os.getenv("SPENDIFAI_DB", "sqlite:///ledger.db")
 engine = create_tables(get_engine(DB_URL))
 
+# ── Dev mode (AI-193) ─────────────────────────────────────────────────────────
+# When SPENDIFAI_DEV_MODE=1 the developer-only pages (e.g. the pipeline
+# Debugger) become reachable. Never set in production builds.
+_DEV_MODE = os.getenv("SPENDIFAI_DEV_MODE") == "1"
+
 # ── Startup cleanup ───────────────────────────────────────────────────────────
 if "stale_jobs_reset" not in st.session_state:
     st.session_state["stale_jobs_reset"] = True
@@ -218,3 +223,7 @@ elif page == "checklist":
 elif page == "chat":
     from ui.chat_page import render_chat_page
     render_chat_page(engine)
+
+elif _DEV_MODE and page == "debugger":
+    from ui.debugger_page import render_debugger_page
+    render_debugger_page(engine)

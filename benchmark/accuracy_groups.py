@@ -17,6 +17,7 @@ from __future__ import annotations
 # Ordine: dal più recente al più vecchio.
 # (group_id, boundary_commit, descrizione)
 ACCURACY_GROUPS = [
+    ("G7", "a3639f7", "deterministic sign-detection by account-type (AI-149/AI-197)"),
     ("G6", "b3947a7", "real taxonomy_map + fix SyntheticHistoryCache"),
     ("G5", "c4a6768", "static rules JSON + NSI lookup"),
     ("G4", "4e912f8", "cleaner dedup + indexed batch"),
@@ -29,6 +30,15 @@ ACCURACY_GROUPS = [
 # Commit espliciti per ogni gruppo (short hash 7 char).
 # Commit non elencati → G0 (fallback).
 _GROUP_COMMITS: dict[str, str] = {}
+
+# G7 — AI-197: sign-detection deterministica per tipo conto (classifier+normalizer).
+# I commit precedenti del branch (debugger AI-193, chore .env) NON cambiano
+# l'accuratezza (UI/orchestrator/echo) → restano in G6.
+for _c in ["a3639f7"]:
+    _GROUP_COMMITS[_c] = "G7"
+
+for _c in ["2222109", "4921ae3"]:
+    _GROUP_COMMITS[_c] = "G6"
 
 for _c in [
     "0c1f61b", "a7a7990", "unknown", "7b6803f", "87aed75", "3373100", "0861ffe", "4160e64", "153de35", "acb405c", "d48ea72", "c3ca822", "084bdfb", "78ec3e8", "164bcac", "6eaba1f", "4bca4b4", "c3630c5",

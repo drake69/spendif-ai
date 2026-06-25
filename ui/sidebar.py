@@ -1,3 +1,5 @@
+import os
+
 import streamlit as st
 
 from ui.i18n import t
@@ -70,5 +72,18 @@ def render_sidebar() -> str:
             else:
                 st.session_state["page"] = key
                 st.rerun()
+
+    # Dev-only entry (AI-193): hardcoded label, shown only when SPENDIFAI_DEV_MODE=1.
+    if os.getenv("SPENDIFAI_DEV_MODE") == "1":
+        is_active = st.session_state["page"] == "debugger"
+        if st.sidebar.button(
+            "🔬 Debugger",
+            key="nav_debugger",
+            width="stretch",
+            type="primary" if is_active else "secondary",
+            help="Dev tool: trace pipeline su un campione, nessuna scrittura DB",
+        ):
+            st.session_state["page"] = "debugger"
+            st.rerun()
 
     return st.session_state["page"]

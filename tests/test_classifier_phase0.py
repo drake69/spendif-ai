@@ -778,3 +778,62 @@ class TestClassifyDocument:
         with patch("core.classifier.call_with_fallback", return_value=(bad_result, "mock")):
             result = classify_document(df, None)  # type: ignore
         assert result is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI-149: deterministic sign decision by account-type prior
+# ─────────────────────────────────────────────────────────────────────────────
+class TestAccountTypeSignPrior:
+
+    @staticmethod
+    def _apply(amounts, doc_type, account_type=None, debit_col=None, credit_col=None):
+        from core.classifier import _apply_account_type_sign_prior
+        df = pd.DataFrame({"Importo": [str(a) for a in amounts]})
+        res = {"amount_col": "Importo", "debit_col": debit_col, "credit_col": credit_col,
+               "doc_type": doc_type, "sign_convention": "debit_positive", "invert_sign": False}
+        return _apply_account_type_sign_prior(res, df, "test", account_type=account_type)
+
+    def test_expected_dominant_sign_map(self):
+        from core.classifier import _expected_dominant_sign
+        assert _expected_dominant_sign("credit_card") == -1
+        assert _expected_dominant_sign("debit_card") == -1
+        assert _expected_dominant_sign("prepaid_card") == -1
+        assert _expected_dominant_sign("cash") == -1
+        assert _expected_dominant_sign("savings_account") == +1
+        assert _expected_dominant_sign("bank_account") is None
+        assert _expected_dominant_sign("") is None
+
+    def test_card_expenses_positive_inverts(self):
+        # AI-149 regression: amex with expenses stored positive (majority +)
+        out = self._apply([50, 30, 1000, -80], "credit_card")
+        assert out["sign_convention"] == "signed_single"
+        assert out["invert_sign"] is True
+        assert out["positive_ratio"] == 0.75 and out["negative_ratio"] == 0.25
+
+    def test_card_expenses_already_negative_no_invert(self):
+        out = self._apply([-97, -50, 2038], "credit_card")
+        assert out["invert_sign"] is False
+
+    def test_ratios_always_sum_to_one(self):
+        out = self._apply([50, 30, 1000, -80], "credit_card")
+        assert round(out["positive_ratio"] + out["negative_ratio"], 6) == 1.0
+
+    def test_savings_opposite_prior(self):
+        # deposits positive → no invert
+        assert self._apply([100, 200, -30], "savings_account")["invert_sign"] is False
+        # deposits stored negative → invert
+        assert self._apply([-100, -200, 30], "savings_account")["invert_sign"] is True
+
+    def test_bank_account_no_prior_keeps_invert(self):
+        out = self._apply([500, -30, -40], "bank_account")
+        assert out["invert_sign"] is False  # unchanged from input
+
+    def test_s0_single_cycle_first_tx_decides(self):
+        # ≤2 movements → first non-zero tx; card, first positive → invert
+        assert self._apply([50, -80], "credit_card")["invert_sign"] is True
+        # known edge: payment (negative) listed first → no invert
+        assert self._apply([-80, 50], "credit_card")["invert_sign"] is False
+
+    def test_debit_credit_columns_untouched(self):
+        out = self._apply([50, 30], "bank_account", debit_col="Dare", credit_col="Avere")
+        assert out["sign_convention"] == "debit_positive"  # not a single-column file
