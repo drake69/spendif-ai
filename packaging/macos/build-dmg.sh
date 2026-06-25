@@ -27,11 +27,13 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 VERSION=""
 SKIP_PYINSTALLER=false
+WITH_SSM=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)           VERSION="$2"; shift 2 ;;
     --skip-pyinstaller)  SKIP_PYINSTALLER=true; shift ;;
+    --with-ssm)          WITH_SSM=true; shift ;;
     -h|--help)
       sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
@@ -58,6 +60,25 @@ echo "▸ Spendif.ai DMG builder — version ${VERSION}"
 
 mkdir -p "${BUILD_DIR}"
 rm -f "${DMG_PATH}"
+
+# ── 0. SSM build (optional) ─────────────────────────────────────────────────
+# Compiles llama-cpp-python from git HEAD with Metal GPU support so PyInstaller
+# bundles an SSM-capable llama.cpp (required for Qwen 3.5 9B and future
+# hybrid-SSM models). Without this, those models fail with "Failed to load".
+if [[ "${WITH_SSM}" == "true" ]]; then
+  echo "▸ Building llama-cpp-python with SSM support (Metal)..."
+  bash "${REPO_ROOT}/scripts/setup_ssm_build.sh" --yes
+  echo "✔ SSM build complete"
+fi
+
+# ── 0b. Stamp build info ────────────────────────────────────────────────────
+BUILD_TS="$(date '+%Y-%m-%d %H:%M')"
+cat > "${REPO_ROOT}/core/_build_info.py" <<PYEOF
+# Generated at build time — do not edit manually.
+BUILD_TIME = "${BUILD_TS}"
+BUILD_VERSION = "${VERSION}"
+PYEOF
+echo "▸ Build stamp: v${VERSION} @ ${BUILD_TS}"
 
 # ── 1. PyInstaller ──────────────────────────────────────────────────────────
 if [[ "${SKIP_PYINSTALLER}" == "false" ]]; then

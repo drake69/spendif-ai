@@ -30,6 +30,17 @@ info()  { echo -e "${GREEN}[setup_ssm]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[setup_ssm]${NC} $*"; }
 error() { echo -e "${RED}[setup_ssm]${NC} $*"; exit 1; }
 
+# ── Flags ────────────────────────────────────────────────────────────────────
+YES=false
+NO_CUSTOM_LIST=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes|-y)           YES=true;            shift ;;
+    --no-custom-list)   NO_CUSTOM_LIST=true; shift ;;
+    *) error "Unknown argument: $1" ;;
+  esac
+done
+
 PYTHON="${PYTHON:-.venv/bin/python}"
 [ -x "$PYTHON" ] || PYTHON="python3"
 CUSTOM_LIST="benchmark/.custom_packages"
@@ -93,8 +104,10 @@ echo ""
 echo "Tempo stimato: ~3-5 min su Apple Silicon, ~5-10 min su CUDA, ~10+ min su ROCm/Vulkan."
 echo "Note: git HEAD può essere instabile. Se rompe, riprova con LLAMACPP_GIT_REF=<tag-noto>."
 echo ""
-read -r -p "Procedo? [y/N] " reply
-[[ "$reply" =~ ^[Yy]$ ]] || { info "Annullato — nessuna modifica."; exit 0; }
+if ! $YES; then
+  read -r -p "Procedo? [y/N] " reply
+  [[ "$reply" =~ ^[Yy]$ ]] || { info "Annullato — nessuna modifica."; exit 0; }
+fi
 
 # ── 5. Build ────────────────────────────────────────────────────────────────
 info "Avvio compilazione…"
@@ -123,7 +136,9 @@ except Exception as e:
 PY
 
 # ── 7. Garantisce .custom_packages contenga llama_cpp_python ────────────────
-if [ -f "$CUSTOM_LIST" ]; then
+if $NO_CUSTOM_LIST; then
+    info "Salto aggiornamento custom_packages (--no-custom-list)."
+elif [ -f "$CUSTOM_LIST" ]; then
     if grep -qE '^[[:space:]]*llama_cpp_python[[:space:]]*$' "$CUSTOM_LIST"; then
         info "$CUSTOM_LIST già contiene llama_cpp_python"
     else

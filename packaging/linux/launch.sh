@@ -140,6 +140,30 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
   fi
   exit 1
 fi
+# ── 2b. SSM build — first launch only ───────────────────────────────────────
+# Compiles llama-cpp-python from git with GPU support so Qwen 3.5 9B (and
+# future SSM-hybrid models) work. Runs once; protected by SSM_MARKER so
+# subsequent uv syncs don't re-run the 3-8 min compile.
+SSM_MARKER="$VENV_DIR/.ssm_built"
+if $IS_FIRST_LAUNCH && [ ! -f "$SSM_MARKER" ]; then
+  echo "▸ Building llama-cpp-python with SSM support (first launch only)…"
+  _ssm_ok=true
+  PYTHON="$VENV_DIR/bin/python" \
+    bash "$APP_DIR/scripts/setup_ssm_build.sh" --yes --no-custom-list || _ssm_ok=false
+  if $_ssm_ok; then
+    touch "$SSM_MARKER"
+    echo "✔ SSM build complete — Qwen 3.5 9B models now available"
+  else
+    echo "⚠ SSM build failed — app will work but Qwen 3.5 9B models are unavailable"
+  fi
+elif [ -f "$SSM_MARKER" ]; then
+  # Protect the SSM build: uv sync --no-reinstall-package keeps the git-compiled
+  # llama-cpp-python and only updates other packages when the lockfile changes.
+  echo "SSM build present — using --no-reinstall-package llama-cpp-python"
+  UV_PROJECT_ENVIRONMENT="$VENV_DIR" \
+    "$UV" sync --extra desktop --frozen --no-reinstall-package llama-cpp-python 2>/dev/null || true
+fi
+
 # Mark the venv as ready so subsequent launches skip the slow first-launch
 # code path AND, equally important, skip the zenity progress dialog.
 touch "$READY_MARKER"

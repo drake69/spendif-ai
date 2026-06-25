@@ -712,6 +712,7 @@
   "analytics.status.absent": "⚪ Absent",
   "analytics.status.normal": "🟢 Normal",
   "upload.title": "📥 Import",
+  "upload.test_mode_banner": "🧪 Test mode active — only the first 20 transactions per file will be imported. Disable Test mode in Settings before using the app with real data.",
   "upload.processing": "Processing…",
   "upload.progress_auto": "Auto-refresh — {pct}% completed",
   "upload.completed": "Import completed!",

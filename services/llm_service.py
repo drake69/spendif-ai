@@ -12,6 +12,52 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class GgufModelInfo:
+    """Unified catalog entry merging static metadata with local-disk status."""
+    name: str               # catalog key / file stem (e.g. "Qwen_Qwen3.5-9B-Q4_K_M")
+    url: str                # download URL
+    size_gb: float          # catalog size estimate (GB)
+    description: str        # human-readable description
+    downloaded: bool        # True when the .gguf file is present locally
+    local_path: str         # absolute path when downloaded, else ""
+    local_size_gb: float | None  # actual file size when downloaded
+
+
+def get_gguf_catalog() -> list[GgufModelInfo]:
+    """Return every catalog model merged with its local-disk status.
+
+    Single source of truth for the picker AND the download section — no more
+    ad-hoc merge logic scattered across the UI.
+    """
+    from core.llm_backends import DEFAULT_GGUF_MODELS
+    models_dir = Path.home() / ".spendifai" / "models"
+
+    # Build a case-insensitive map: lowercase_stem → {name, path, size_gb}
+    local_by_lower: dict[str, dict] = {}
+    if models_dir.exists():
+        for p in sorted(models_dir.glob("*.gguf")):
+            local_by_lower[p.stem.lower()] = {
+                "name": p.stem,
+                "path": str(p),
+                "size_gb": round(p.stat().st_size / (1024 ** 3), 2),
+            }
+
+    result = []
+    for name, meta in DEFAULT_GGUF_MODELS.items():
+        local = local_by_lower.get(name.lower())
+        result.append(GgufModelInfo(
+            name=name,
+            url=meta.get("url", ""),
+            size_gb=float(meta.get("size_gb", 0)),
+            description=meta.get("description", ""),
+            downloaded=local is not None,
+            local_path=local["path"] if local else "",
+            local_size_gb=local["size_gb"] if local else None,
+        ))
+    return result
+
+
+@dataclass(frozen=True)
 class LLMTestResult:
     """Result of a backend test. `severity='warning'` signals a recoverable
     failure with a known fix in `hint_command`."""
