@@ -358,7 +358,11 @@ PYEOF
 
     # No bulk download — models are downloaded just-in-time in the run loop (step 4).
     # This avoids saturating disk on machines with limited space.
-    GGUF_TOTAL=$(ls -1 "$MODELS_DIR"/*.gguf 2>/dev/null | wc -l | tr -d ' ')
+    # On a fresh machine MODELS_DIR may not exist and the glob matches nothing;
+    # guard so `set -euo pipefail` doesn't abort the whole run (the failing ls
+    # exits 2 → script died at step 3a before any model could be fetched).
+    mkdir -p "$MODELS_DIR"
+    GGUF_TOTAL=$( (ls -1 "$MODELS_DIR"/*.gguf 2>/dev/null || true) | wc -l | tr -d ' ')
     echo "[ok] $GGUF_TOTAL GGUF models already in $MODELS_DIR (others will be downloaded on demand)"
 else
     echo ""
