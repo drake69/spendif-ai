@@ -9,7 +9,11 @@
   <meta property="og:description" content="Tres pasos: descargar, instalar, primer inicio. Todo offline, sin cuenta." />
 
   <!-- Vemetric Analytics -->
-  <script defer src="https://cdn.vemetric.com/latest/vemetric.min.js" data-token="o10JyrtkgQ8RAn1q"></script>
+  <script>
+    window.vmtrcq = window.vmtrcq || [];
+    window.vmtrc = window.vmtrc || function (){window.vmtrcq.push(Array.prototype.slice.call(arguments))};
+  </script>
+  <script defer src="https://cdn.vemetric.com/main.js" id="vmtrc-scr" data-token="o10JyrtkgQ8RAn1q"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
