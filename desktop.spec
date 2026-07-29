@@ -61,7 +61,12 @@ app_datas.append(("desktop/splash.html", "desktop"))
 if Path(".env.example").exists():
     app_datas.append((".env.example", "."))
 
-# VERSION file
+# VERSION file — single source of truth for the app version
+_app_version = (
+    Path("VERSION").read_text(encoding="utf-8").strip()
+    if Path("VERSION").exists()
+    else "0.0.0"
+)
 if Path("VERSION").exists():
     app_datas.append(("VERSION", "."))
 
@@ -183,8 +188,8 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName": "Spendif.ai",
             "CFBundleDisplayName": "Spendif.ai",
-            "CFBundleShortVersionString": "3.0.0",
-            "CFBundleVersion": "3.0.0",
+            "CFBundleShortVersionString": _app_version,
+            "CFBundleVersion": _app_version,
             "LSMinimumSystemVersion": "12.0",
             "NSHighResolutionCapable": True,
         },
