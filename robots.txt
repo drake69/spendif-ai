@@ -1,0 +1,15 @@
+# Spendif.ai landing — robots
+User-agent: *
+Allow: /
+
+# AI / generative-engine crawlers are welcome (GEO)
+User-agent: GPTBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+
+Sitemap: https://drake69.github.io/spendif-ai/sitemap.xml
