@@ -1,0 +1,28 @@
+# Spendif.ai
+
+> Spendif.ai is a free, open-source personal-finance ledger that runs entirely on your own computer. It aggregates transaction exports from many different banks into one unified ledger — removing duplicates, reconciling card-vs-account movements, detecting internal transfers, and categorising spending with a hybrid deterministic + local-LLM pipeline. Your data never leaves your machine.
+
+Spendif.ai is desktop-first (macOS, Windows, Linux) with an optional companion mobile app for cash tracking only. It is built for people who keep multiple bank accounts and want real control over their money without subscriptions, cloud accounts, or sending their financial data to third parties.
+
+## What it does
+
+- **Unified ledger**: import CSV/XLSX movement files from any bank; the format is detected automatically.
+- **Idempotent deduplication**: re-importing the same file never creates duplicate transactions.
+- **Card–account reconciliation**: a card charge and its matching current-account debit are recognised as one movement, not two.
+- **Internal transfer detection**: money moved between your own accounts does not distort spending totals.
+- **Hybrid categorisation**: a local LLM proposes categories, deterministic rules seal the result; corrections become reusable rules.
+- **Privacy by design**: offline-first, automatic PII redaction before any hosted-LLM call, a single portable local SQLite database (`~/.spendifai/ledger.db`).
+
+## Key facts
+
+- License: open source (see the repository LICENSE).
+- Price: free, no subscription.
+- Platforms: Windows, macOS, Linux (desktop). Data stored locally under `~/.spendifai/`.
+- LLM: works with a bundled local model (llama.cpp / GGUF) or optional hosted providers, always with local PII redaction.
+
+## Links
+
+- Website: https://drake69.github.io/spendif-ai/
+- Source code: https://github.com/drake69/spendif-ai
+- Downloads / releases: https://github.com/drake69/spendif-ai/releases
+- License: https://github.com/drake69/spendif-ai/blob/main/LICENSE
