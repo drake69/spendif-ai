@@ -127,7 +127,11 @@ jobs:
         # Exit 1 if a file not in the baseline has violations,
         # or if a file in the baseline exceeds its max_violations.
         # The JSON is saved for the following steps.
-        run: uv run python tools/coupling_check.py --strict --json | tee coupling_report.json
+        # set -o pipefail is REQUIRED: without it the pipe returns tee's exit
+        # code (always 0), so a failing check would never fail the job.
+        run: |
+          set -o pipefail
+          uv run python tools/coupling_check.py --strict --json | tee coupling_report.json
         # The job fails if the command exits with code 1.
         # continue-on-error: false  ← default, explicit for clarity
 

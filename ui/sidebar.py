@@ -93,14 +93,13 @@ def render_sidebar() -> str:
 
 
 def _render_build_info() -> None:
-    try:
-        from core._build_info import BUILD_TIME, BUILD_VERSION
-    except ImportError:
-        BUILD_TIME, BUILD_VERSION = "dev", "dev"
-    if BUILD_TIME == "dev":
+    from services.app_info import get_build_info
+
+    build_version, build_time = get_build_info()
+    if build_time == "dev":
         return
     st.sidebar.markdown(
         f"<div style='text-align:center;color:#666;font-size:11px;margin-top:8px'>"
-        f"v{BUILD_VERSION} · {BUILD_TIME}</div>",
+        f"v{build_version} · {build_time}</div>",
         unsafe_allow_html=True,
     )

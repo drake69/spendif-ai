@@ -631,19 +631,13 @@ def render_llm_models_page(engine) -> None:
 def _render_correction_benchmark(engine) -> None:
     """Live implicit benchmark derived from user category corrections."""
     import pandas as pd
-    from db import repository
-    from sqlalchemy.orm import sessionmaker
+    from services.transaction_service import TransactionService
 
     st.markdown(f"**{t('llm_models.benchmark.title')}**")
     st.caption(t("llm_models.benchmark.caption"))
 
     try:
-        _Session = sessionmaker(bind=engine, expire_on_commit=False)
-        s = _Session()
-        try:
-            rows = repository.get_correction_benchmark(s)
-        finally:
-            s.close()
+        rows = TransactionService(engine).get_correction_benchmark()
     except Exception:
         st.caption(t("llm_models.benchmark.unavailable"))
         return
