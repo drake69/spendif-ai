@@ -44,9 +44,36 @@ Il file `ledger.db` contiene **tutto** — non esistono altri file di dati da co
 
 | Modalità di installazione | Percorso |
 |--------------------------|----------|
+| **App desktop** (DMG / installer Windows / AppImage) | `~/.spendifai/ledger.db` — vedi tabella per sistema operativo qui sotto |
 | **One-liner Docker** (`install.sh` / `install.ps1`) | Volume Docker `spendifai_data` → `/app/data/ledger.db` dentro il container |
 | **Docker Compose da repo** | Volume Docker `spendifai_data` → `/app/data/ledger.db` dentro il container |
 | **Nativa (Mac/Linux, uv)** | `./ledger.db` nella cartella del progetto |
+
+### App desktop: la cartella `~/.spendifai/`
+
+Quando installi Spendif.ai come applicazione desktop, tutti i dati vivono in un'unica cartella nella tua home utente, **con lo stesso nome su ogni sistema operativo**:
+
+| Sistema operativo | Percorso completo |
+|-------------------|-------------------|
+| **macOS** | `/Users/<utente>/.spendifai/ledger.db` |
+| **Linux** | `/home/<utente>/.spendifai/ledger.db` |
+| **Windows** | `C:\Users\<utente>\.spendifai\ledger.db` |
+
+> Su macOS/Linux la cartella `.spendifai` è **nascosta** (inizia con un punto): nel Finder premi `Cmd+Shift+.` per vederla, nel file manager Linux premi `Ctrl+H`. Su Windows la cartella è visibile normalmente sotto il tuo profilo utente.
+
+Accanto a `ledger.db`, nella stessa cartella, l'app tiene altri file:
+
+| File / cartella | Cosa contiene | Va nel backup? |
+|-----------------|---------------|----------------|
+| `ledger.db` | Il database SQLite — tutti i tuoi dati | ✅ **Sempre** |
+| `.env` | Configurazione utente e **chiavi API** (OpenAI/Anthropic) in chiaro | ✅ Sì (⚠️ file sensibile) |
+| `system_settings.yaml` | Override delle impostazioni di sistema | ✅ Sì (se presente) |
+| `models/` | Modelli LLM `.gguf` scaricati (vari GB) | ⛔ Opzionale — si riscaricano da soli |
+| `.schema_hash` | Cache interna dello schema DB | ⛔ No — vedi sezione 6 |
+| `launcher.lock` | Lock di istanza singola | ⛔ No — mai copiarlo |
+| `logs/` | Log applicativi | ⛔ No |
+
+> ⚠️ **Il file `.env` contiene le tue chiavi API in chiaro** (nessuna cifratura): trattalo come una password. Se copi la cartella su una chiavetta o su un cloud, quelle chiavi viaggiano con lei.
 
 ### Perché il volume Docker non è una cartella normale?
 
@@ -199,13 +226,39 @@ docker compose -C ~/spendifai up -d
 
 ## 6 — Spostare il database su un altro computer
 
-1. **Fai il backup** del DB sul computer di origine (sezione 3)
-2. **Copia il file** `.db` sul nuovo computer (USB, cloud, scp, ecc.)
-3. **Installa Spendif.ai** sul nuovo computer con il one-liner (`install.sh` / `install.ps1`)
-4. **Importa il DB** nel volume Docker (sezione 5)
-5. Apri l'app: tutte le transazioni, regole e impostazioni sono presenti
+Il file SQLite è **portabile**: funziona identicamente su Mac, Linux e Windows, indipendentemente dall'architettura del processore (Intel / ARM). Puoi quindi passare da Windows a Mac, da Linux a Windows, da un Mac a un altro, ecc. senza alcuna conversione.
 
-> Il file SQLite è **portabile**: funziona identicamente su Mac, Linux e Windows, indipendentemente dall'architettura del processore (Intel / ARM).
+### 6.1 — App desktop → altro computer con app desktop (il caso più comune)
+
+Questa è la procedura per chi usa Spendif.ai come applicazione installata (non Docker), sia che vada da **Windows/Linux a un altro PC**, sia da **un Mac a un altro Mac** o tra sistemi operativi diversi.
+
+**Passo 1 — Chiudi Spendif.ai** sul computer di origine (esci del tutto, non lasciarlo in esecuzione). Copiare il database mentre l'app scrive può corromperlo.
+
+**Passo 2 — Copia i dati.** Vai nella cartella `~/.spendifai/` (vedi sezione 2 per il percorso esatto del tuo sistema operativo) e copia questi tre elementi su una chiavetta USB o su un cloud:
+
+- `ledger.db` — il database, obbligatorio
+- `.env` — configurazione e chiavi API (⚠️ file sensibile, contiene le chiavi in chiaro)
+- `system_settings.yaml` — solo se presente
+
+> **Non copiare** `launcher.lock` né `.schema_hash` (vedi nota sotto). La cartella `models/` (i modelli LLM, vari GB) puoi lasciarla: sull'altro computer vengono riscaricati al primo avvio. Se però la nuova macchina sarà **offline**, oppure vuoi evitare il ri-download, copia anche `models/`.
+
+**Passo 3 — Installa Spendif.ai** sul computer di destinazione e **avvialo almeno una volta**, poi **chiudilo**. Questo crea la cartella `~/.spendifai/` vuota.
+
+**Passo 4 — Incolla i file** copiati al passo 2 dentro `~/.spendifai/` sul computer di destinazione, sovrascrivendo il `ledger.db` appena creato.
+
+**Passo 5 — Riavvia Spendif.ai.** Tutte le transazioni, le regole, la tassonomia e le impostazioni sono presenti.
+
+> **Cambio di versione dell'app** — Se il computer di destinazione ha una versione di Spendif.ai **più recente** dell'origine, va tutto bene: lo schema del database viene aggiornato automaticamente al primo avvio (assicurati solo di **non** aver copiato `.schema_hash`, così le migrazioni girano). Il percorso inverso — portare un DB di una versione **più nuova** su un'app **più vecchia** — non è supportato: installa prima la stessa versione (o più recente) sulla destinazione.
+
+### 6.2 — Da/verso installazione Docker
+
+Se una delle due macchine usa l'installazione Docker anziché l'app desktop:
+
+1. **Fai il backup** del DB sul computer di origine (sezione 3 — usa `docker cp` se l'origine è Docker, oppure copia `~/.spendifai/ledger.db` se è l'app desktop)
+2. **Copia il file** `ledger.db` sul nuovo computer (USB, cloud, scp, ecc.)
+3. **Installa Spendif.ai** sul nuovo computer
+4. **Importa il DB**: nel volume Docker → sezione 5; nell'app desktop → copialo in `~/.spendifai/ledger.db` (app chiusa)
+5. Apri l'app: tutte le transazioni, regole e impostazioni sono presenti
 
 ---
 
