@@ -38,6 +38,11 @@ dependencies = [
     # Floor declared here even though idna is a transitive dep of httpx/requests
     # so a fresh `uv lock` resolves to >=3.15.
     "idna>=3.15",
+    # Security pins (transitive deps of streamlit) — pip-audit gate.
+    # pillow<12.3.0 carries PYSEC-2026-2253..2257 / 3451..3454.
+    # gitpython<3.1.55 carries GHSA-2f96-g7mh-g2hx and 7 more (fixes across 3.1.51..3.1.55).
+    "pillow>=12.3.0",
+    "gitpython>=3.1.55",
     # Testing
     "pytest>=8.0",
     "pytest-cov>=5.0",
