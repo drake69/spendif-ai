@@ -1,4 +1,4 @@
-# Spendif.ai v3.0
+# Spendif.ai
 
 [![CI](https://github.com/drake69/spendif-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/drake69/spendif-ai/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/drake69/spendif-ai/graph/badge.svg)](https://codecov.io/gh/drake69/spendif-ai)
@@ -27,7 +27,7 @@ Unified personal finance ledger with a hybrid deterministic + LLM pipeline. Aggr
 - **Hybrid pipeline**: deterministic normalizer + LLM classifier + categorizer cascade
 - **Multi-backend LLM** with circuit breaker: llama.cpp (default for desktop), Ollama, OpenAI, Claude — direct SDK use, no LangChain
 - **Native desktop launcher**: pywebview + PyInstaller → DMG / MSIX / .deb / .rpm
-- **14-page Streamlit UI**, full IT+EN i18n (760+ translation keys)
+- **17-page Streamlit UI**, full IT+EN i18n (760+ translation keys)
 
 ## What's implemented
 
@@ -54,7 +54,7 @@ Would one of these help you? Tell us in [GitHub Discussions](https://github.com/
 
 ```bash
 git clone https://github.com/drake69/spendif-ai.git
-cd spendify
+cd spendif-ai
 uv sync --extra desktop
 
 # Local LLM (developer choice — the desktop installer handles this automatically):
@@ -102,7 +102,7 @@ Full diagram and Flow 1 vs Flow 2 → [docs/architecture.md](docs/architecture.m
 
 ```
 sw_artifacts/
-├── app.py                  # Streamlit entry point (onboarding gate + 14 pages)
+├── app.py                  # Streamlit entry point (onboarding gate + 17 pages)
 ├── core/                   # Pipeline: orchestrator, normalizer, classifier, categorizer, sanitizer, llm_backends
 ├── services/               # Facade layer for UI; async runner; settings; import
 ├── ui/                     # Streamlit pages + i18n + widgets
