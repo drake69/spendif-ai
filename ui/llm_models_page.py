@@ -665,16 +665,25 @@ def _render_correction_benchmark(engine) -> None:
     col_acc = t("llm_models.benchmark.col_accuracy")
     col_cons = t("llm_models.benchmark.col_consistency")
 
-    st.dataframe(
-        df.style.format(
-            {
-                col_acc: lambda v: f"{v:.1f}%" if v is not None else "—",
-                col_cons: lambda v: f"{v:.1f}%" if v is not None else "—",
-            }
-        ).background_gradient(subset=[col_acc], cmap="RdYlGn", vmin=0, vmax=100),
-        use_container_width=True,
-        hide_index=True,
+    import importlib.util
+
+    styler = df.style.format(
+        {
+            col_acc: lambda v: f"{v:.1f}%" if v is not None else "—",
+            col_cons: lambda v: f"{v:.1f}%" if v is not None else "—",
+        }
     )
+    # background_gradient needs matplotlib (an optional pandas dependency), and
+    # pandas raises lazily at render time — inside st.dataframe — if it's absent.
+    # That unhandled error would halt the Streamlit script and hide every section
+    # rendered after this one (notably the model download UI). Only add the
+    # gradient when matplotlib is actually installed; otherwise show a plain table.
+    if importlib.util.find_spec("matplotlib") is not None:
+        styler = styler.background_gradient(
+            subset=[col_acc], cmap="RdYlGn", vmin=0, vmax=100
+        )
+
+    st.dataframe(styler, use_container_width=True, hide_index=True)
     st.caption(t("llm_models.benchmark.note"))
 
 
