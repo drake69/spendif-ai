@@ -72,6 +72,53 @@ from support.logging import setup_logging
 logger = setup_logging()
 
 
+class _RecordingBackend:
+    """Transparent proxy around an LLMBackend that records every
+    ``complete_structured()`` call (prompt + raw response) into a shared sink.
+
+    Used only by the dev Debugger page (AI-193) to surface the raw LLM I/O of
+    each pipeline phase in clear. In production ``llm_trace`` is ``None`` and no
+    wrapping happens, so this has zero impact on normal imports.
+    """
+
+    def __init__(self, inner, phase: str, sink: list):
+        object.__setattr__(self, "_inner", inner)
+        object.__setattr__(self, "_phase", phase)
+        object.__setattr__(self, "_sink", sink)
+
+    def complete_structured(self, system_prompt, user_prompt, json_schema, temperature=0.0):
+        import time as _t
+        inner = object.__getattribute__(self, "_inner")
+        phase = object.__getattribute__(self, "_phase")
+        sink = object.__getattribute__(self, "_sink")
+        t0 = _t.monotonic()
+        result = None
+        error = None
+        try:
+            result = inner.complete_structured(system_prompt, user_prompt, json_schema, temperature)
+            return result
+        except Exception as exc:  # record then re-raise unchanged
+            error = repr(exc)
+            raise
+        finally:
+            sink.append({
+                "phase": phase,
+                "backend": getattr(inner, "name", "?"),
+                "model": getattr(inner, "model_id", ""),
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "json_schema": json_schema,
+                "response": result,
+                "error": error,
+                "duration_ms": int((_t.monotonic() - t0) * 1000),
+            })
+
+    def __getattr__(self, name):
+        # Delegate everything else (name, model_id, is_remote, get_context_info,
+        # model_size_bytes, last_usage, …) to the wrapped backend.
+        return getattr(object.__getattribute__(self, "_inner"), name)
+
+
 @dataclass
 class ProcessingConfig:
     llm_backend: str = "local_llama_cpp"
@@ -597,8 +644,11 @@ def _normalize_df_with_schema(
         raw_date_acc = row.get(schema.date_accounting_col, "") if schema.date_accounting_col else None
         tx_date_acc = parse_date_safe(str(raw_date_acc), schema.date_format) if raw_date_acc else None
 
-        # Capture raw amount string(s) before parsing — used for the dedup hash
-        if schema.sign_convention in (SignConvention.debit_positive, SignConvention.credit_negative):
+        # Capture raw amount string(s) before parsing — used for the dedup hash.
+        # S4 (AI-149): branch on the ACTUAL presence of debit/credit columns, not
+        # on sign_convention. A single-amount-column file must echo amount_col,
+        # never the "<debit>|<credit>" form (which produced a bare "|").
+        if schema.debit_col or schema.credit_col:
             _d = str(row.get(schema.debit_col, "")) if schema.debit_col else ""
             _c = str(row.get(schema.credit_col, "")) if schema.credit_col else ""
             raw_amount_str = f"{_d}|{_c}"
@@ -788,6 +838,8 @@ def process_file(
     skip_rows_override: Optional[int] = None,  # user-confirmed skip_rows from UI; takes precedence over schema
     history_cache=None,  # Optional[HistoryCache] — pre-loaded history for batch categorization
     taxonomy_map: Optional[dict] = None,  # C-08-cascade: {osm_tag: (category, subcategory)} or None
+    account_type_override: Optional[str] = None,  # AI-193 debugger: force account_type, bypass Account lookup
+    llm_trace: Optional[list] = None,  # AI-193 debugger: sink for raw LLM prompt/response per phase
 ) -> ImportResult:
     """
     Process a single file through Flow 1 or Flow 2.
@@ -875,6 +927,14 @@ def process_file(
                 f"({getattr(config, f'{phase_name}_llm_backend', '') or 'cat_*'})"
             )
 
+    # AI-193 (dev Debugger): when a trace sink is provided, wrap each phase
+    # backend so every LLM prompt/response is recorded in clear. No-op in prod.
+    if llm_trace is not None:
+        classifier_backend = _RecordingBackend(classifier_backend, "classify", llm_trace)
+        cleaner_backend    = _RecordingBackend(cleaner_backend, "cleaner", llm_trace)
+        cat_backend        = _RecordingBackend(cat_backend, "categorizer", llm_trace)
+        footer_backend     = _RecordingBackend(footer_backend, "footer", llm_trace)
+
     # Load raw data — load_raw_dataframe detects skip_rows + header internally
     _progress(0.0, "header_detection")
     # skip_rows_override (from UI) takes precedence; fall back to cached schema value
@@ -956,7 +1016,12 @@ def process_file(
 
     # Resolve account_type from the Account table when user selected an account
     _account_type: str | None = None
-    if account_label_override and account_label_override.strip():
+    if account_type_override and account_type_override.strip():
+        # AI-193 debugger: caller forces the account_type directly, bypassing
+        # the Account-table lookup — lets the same file be traced as bank_account
+        # vs prepaid_card vs credit_card to diagnose sign-convention bugs (AI-149).
+        _account_type = account_type_override.strip()
+    elif account_label_override and account_label_override.strip():
         try:
             from db.models import Account, get_engine, get_session
             _session = get_session()

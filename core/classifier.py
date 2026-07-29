@@ -519,6 +519,12 @@ def classify_document(
     # Safety net: re-enforce invert_sign after merge (catches any LLM re-override).
     result = _apply_step0_invert_sign(result, source_name, account_type=account_type)
 
+    # AI-149: deterministic sign decision driven by the account-type prior.
+    # On single-amount-column files this OVERRIDES the LLM's sign_convention/
+    # invert_sign/ratios — the direction of the sign is an accounting fact, not
+    # a semantic guess. See documents/04_software_engineering/07_deterministic_pipeline.md.
+    result = _apply_account_type_sign_prior(result, df_raw, source_name, account_type=account_type)
+
     # Compute deterministic confidence score from merged result
     score = compute_confidence_score(result, header_certain=header_certain)
     result["confidence_score"] = score
@@ -1266,6 +1272,107 @@ def _apply_step0_invert_sign(
         )
         out["invert_sign"] = True
 
+    return out
+
+
+# ── AI-149: deterministic sign decision by account-type prior ───────────────────
+# Each account type carries a prior on the DOMINANT transaction direction, hence
+# the canonical sign that the dominant transactions should have (internal canon:
+# income positive, expenses negative).
+#   ⚠️ DRAFT — table reviewed jointly (see 07_deterministic_pipeline.md). `cash`
+#   and `bank_account` behaviour still to be re-validated.
+_EXPENSE_DOMINANT_TYPES = frozenset({"credit_card", "debit_card", "prepaid_card", "cash"})
+_INCOME_DOMINANT_TYPES = frozenset({"savings_account"})
+# bank_account → mixed → no prior (existing logic stays).
+
+
+def _expected_dominant_sign(type_str: str) -> int | None:
+    """+1 if dominant tx should be positive (income-dominant), -1 if negative
+    (expense-dominant), None when the type carries no reliable prior."""
+    t = (type_str or "").lower()
+    if t in _EXPENSE_DOMINANT_TYPES:
+        return -1
+    if t in _INCOME_DOMINANT_TYPES:
+        return +1
+    return None
+
+
+def _ordered_nonzero_amounts(df, amount_col: str) -> list[float]:
+    """Parse the amount column to signed floats in row order, dropping
+    unparseable and zero cells. Mirrors _inspect_neutral_column_sign parsing."""
+    if amount_col not in df.columns:
+        return []
+    vals = pd.to_numeric(
+        df[amount_col].astype(str)
+                      .str.replace(r"[€$£\s]", "", regex=True)
+                      .str.replace(",", ".", regex=False),
+        errors="coerce",
+    )
+    return [float(v) for v in vals.tolist() if pd.notna(v) and float(v) != 0.0]
+
+
+def _apply_account_type_sign_prior(
+    result: dict, df_raw, source_name: str, account_type: str | None = None
+) -> dict:
+    """Deterministic sign decision for SINGLE-amount-column files (AI-149).
+
+    Forces signed_single (S3), computes positive/negative ratios in Python (S2),
+    and decides invert_sign from the account-type prior + measured majority (S1)
+    or, with ≤2 movements / a tie, from the first non-zero tx (S0 — single billing
+    cycle; the last tx is only a coherence check). Bank accounts (no prior) keep
+    the existing logic.
+    """
+    out = dict(result)
+    amount_col = out.get("amount_col")
+    debit_col = out.get("debit_col")
+    credit_col = out.get("credit_col")
+
+    # Only single-amount-column layouts. Debit/credit two-column files are
+    # structural and handled upstream (Step 0.6).
+    if not amount_col or debit_col or credit_col:
+        return out
+
+    # S3 — single column ⇒ signed_single, never debit_positive/credit_negative.
+    if str(out.get("sign_convention", "")).lower() != "signed_single":
+        logger.info(
+            f"classify_document [{source_name}]: single amount column → "
+            f"forcing sign_convention=signed_single (was {out.get('sign_convention')})"
+        )
+        out["sign_convention"] = "signed_single"
+
+    # S2 — deterministic ratios from the data (also used for S0 first/last).
+    signed = _ordered_nonzero_amounts(df_raw, amount_col)
+    n = len(signed)
+    if n == 0:
+        return out
+    n_pos = sum(1 for v in signed if v > 0)
+    n_neg = n - n_pos
+    out["positive_ratio"] = round(n_pos / n, 4)
+    out["negative_ratio"] = round(n_neg / n, 4)
+
+    # Prior: user declaration (account_type) wins, else detected doc_type.
+    expected = _expected_dominant_sign(account_type) if account_type else None
+    if expected is None:
+        expected = _expected_dominant_sign(out.get("doc_type", ""))
+    if expected is None:
+        # No prior (bank_account/unknown) → leave invert_sign as decided upstream.
+        return out
+
+    # S1 (majority) when the sample is meaningful, else S0 (single-cycle guard).
+    if n >= 3 and n_pos != n_neg:
+        measured = +1 if n_pos > n_neg else -1
+        basis = "S1-majority"
+    else:
+        measured = +1 if signed[0] > 0 else -1   # first non-zero tx
+        basis = "S0-single-cycle"
+
+    out["invert_sign"] = (measured != expected)
+    logger.info(
+        f"classify_document [{source_name}]: sign prior [{basis}] "
+        f"type={account_type or out.get('doc_type')} n_pos={n_pos} n_neg={n_neg} "
+        f"measured={'+' if measured > 0 else '-'} expected={'+' if expected > 0 else '-'} "
+        f"→ invert_sign={out['invert_sign']} (ratios {out['positive_ratio']}/{out['negative_ratio']})"
+    )
     return out
 
 

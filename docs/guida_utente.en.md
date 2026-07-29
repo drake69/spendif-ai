@@ -219,7 +219,7 @@ Go to **✏️ Bulk Edit**. The page is divided into two main areas.
 4. Type **`ELIMINA`** in the confirmation field — only then does the button become enabled
 5. Click the red button
 
-> ⚠️ **Deletion is irreversible.** Always make a backup of the `ledger.db` file before deleting large amounts of data (see the Deployment guide).
+> ⚠️ **Deletion is irreversible.** Always make a backup of the `ledger.db` file before deleting large amounts of data (see section 16 — *Backing up and moving your data*).
 
 > **Example:** You accidentally imported the transactions file of an account that isn't yours. You filter by account, see 200 transactions in the preview, type ELIMINA, and remove them all at once.
 
@@ -528,6 +528,37 @@ Spendif.ai remembers the structure of each imported file (columns, date format, 
 > **When to use:** if the import summary shows discarded rows with reason "Importo non parsabile" for income (or expense) rows, the saved schema probably uses the wrong sign convention. Clear and re-import.
 
 > **Auto-invalidation:** Spendif.ai automatically detects broken schemas. If a file imported with a cached schema produces fewer than 10% parseable transactions, the schema is deleted and the file is re-analysed from scratch using the LLM — no manual intervention needed.
+
+---
+
+## 16. Backing up and moving your data to another computer
+
+**Situation:** You are switching computers, or you want to use Spendif.ai on both your laptop and your desktop, and you want to bring along all your transactions, rules and settings.
+
+All your data lives in **a single file** (`ledger.db`) inside a hidden folder in your user home, called `.spendifai`:
+
+| Operating system | Where to find it |
+|------------------|------------------|
+| **macOS** | `/Users/<yourname>/.spendifai/` — in Finder press `Cmd+Shift+.` to show hidden folders |
+| **Linux** | `/home/<yourname>/.spendifai/` — in your file manager press `Ctrl+H` |
+| **Windows** | `C:\Users\<yourname>\.spendifai\` |
+
+### How to transfer your data (works across any combination: Windows, Mac, Linux)
+
+1. **Close Spendif.ai** on the source computer (quit completely).
+2. Open the `.spendifai` folder and copy these files onto a USB stick or the cloud:
+   - `ledger.db` — your data (required)
+   - `.env` — your settings and AI keys (⚠️ contains the keys in clear text: treat it like a password)
+   - `system_settings.yaml` — only if present
+3. **Install Spendif.ai** on the new computer and **launch it once**, then close it (so it creates the `.spendifai` folder).
+4. **Paste** the copied files into the `.spendifai` folder on the new computer, overwriting.
+5. **Restart Spendif.ai**: you get everything back as it was.
+
+> Your data file is **portable**: you can go from Windows to Mac, Mac to Mac, Linux to Windows — it always works, with no conversion.
+
+> **The AI models** (the `models/` folder) do not need to be copied: they are re-downloaded at first launch on the new computer. Copy them only if the new computer will stay **offline**.
+
+> **Backup tip:** even if you are not switching computers, copy the `ledger.db` file to a safe place every now and then. It is the one file that holds all your work. Technical details and automatic backups: the **Database management** guide (`database.md`).
 
 ---
 
