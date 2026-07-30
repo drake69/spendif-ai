@@ -493,6 +493,9 @@ def _start_streamlit(port: int, app_dir: Path) -> subprocess.Popen:
     env = os.environ.copy()
     env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
     env["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
+    # Nasconde la toolbar Streamlit (bottone "Deploy" + menu dev): app desktop.
+    # Via env così vale anche nel bundle, dove .streamlit/config.toml può non esserci.
+    env["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "minimal"
 
     popen_kwargs = {"env": env, "cwd": str(app_dir)}
     if sys.platform != "win32":

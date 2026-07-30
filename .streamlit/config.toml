@@ -1,0 +1,7 @@
+# Streamlit client config.
+# toolbarMode = "minimal" nasconde la toolbar in alto a destra (bottone "Deploy"
+# + menu sviluppatore): irrilevante/confusionaria in un'app desktop nativa.
+# Applicato globalmente a tutte le pagine, indipendente dai selettori CSS che
+# cambiano tra le release di Streamlit.
+[client]
+toolbarMode = "minimal"
