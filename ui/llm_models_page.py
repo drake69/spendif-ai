@@ -12,7 +12,9 @@ follow-ups.
 """
 from __future__ import annotations
 
+import ipaddress
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import pandas as pd
 import streamlit as st
@@ -22,6 +24,94 @@ from support.logging import setup_logging
 from ui.i18n import t
 
 logger = setup_logging()
+
+
+# ── Privacy state of the selected LLM backend (AI-229) ───────────────────────
+# Honest classification of where the user's data goes. Local backends never
+# touch the internet (green); hosted providers send data in clear text (red).
+# When the payload-redaction feature ships, flip REDACTION_AVAILABLE to True so
+# hosted backends surface as "orange" (data leaves but is redacted) instead.
+REDACTION_AVAILABLE = False
+
+# Backends that always run on the user's machine.
+_LOCAL_BACKENDS = frozenset({"local_llama_cpp", "vllm_offline"})
+# Backends that always reach an external provider over the internet.
+_REMOTE_BACKENDS = frozenset({"openai", "claude"})
+# Backends whose destination depends on the configured URL (local server vs
+# remote). Maps backend → the settings key holding its base URL.
+_URL_DEPENDENT_BACKENDS = {
+    "local_ollama": "ollama_base_url",
+    "openai_compatible": "compat_base_url",
+    "vllm": "vllm_base_url",
+}
+
+# state → (border/accent color, translucent background, icon)
+_PRIVACY_BAR_STYLE = {
+    "green":  ("#3fb950", "rgba(63,185,80,.12)",  "🔒"),
+    "orange": ("#e3762b", "rgba(227,118,43,.12)", "🔐"),
+    "red":    ("#f85149", "rgba(248,81,73,.12)",  "⚠️"),
+}
+
+
+def _url_is_local(url: str) -> bool:
+    """True if ``url`` points to the local machine or a private LAN address.
+
+    Empty or unparseable URLs count as NOT local: a privacy claim must never
+    over-promise, so an unconfigured endpoint is treated as remote.
+    """
+    if not url or not url.strip():
+        return False
+    raw = url.strip()
+    host = urlparse(raw if "://" in raw else f"http://{raw}").hostname
+    if not host:
+        return False
+    host = host.lower()
+    if host == "localhost" or host.endswith(".local"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # a real hostname → remote
+    return ip.is_loopback or ip.is_private or ip.is_link_local
+
+
+def _remote_state() -> str:
+    """State for a backend that reaches the internet: orange if the payload is
+    redacted (feature shipped), otherwise red (clear text)."""
+    return "orange" if REDACTION_AVAILABLE else "red"
+
+
+def _privacy_state(backend: str, settings: dict) -> str:
+    """Classify the selected backend as ``'green'`` | ``'orange'`` | ``'red'``."""
+    if backend in _LOCAL_BACKENDS:
+        return "green"
+    if backend in _REMOTE_BACKENDS:
+        return _remote_state()
+    if backend in _URL_DEPENDENT_BACKENDS:
+        default = "http://localhost:11434" if backend == "local_ollama" else ""
+        url = settings.get(_URL_DEPENDENT_BACKENDS[backend], default)
+        return "green" if _url_is_local(url) else _remote_state()
+    # Unknown backend → be conservative, assume it reaches the internet.
+    return _remote_state()
+
+
+def _render_privacy_bar(backend: str, settings: dict) -> None:
+    """Render the traffic-light privacy bar for the selected main backend."""
+    state = _privacy_state(backend, settings)
+    color, bg, icon = _PRIVACY_BAR_STYLE[state]
+    msg = t(f"llm_models.privacy.{state}")
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;gap:.6rem;
+                    background:{bg};border:1px solid {color};
+                    border-left:6px solid {color};border-radius:8px;
+                    padding:.7rem 1rem;margin:.5rem 0;">
+          <span style="font-size:1.2rem;line-height:1;">{icon}</span>
+          <span style="font-size:.92rem;line-height:1.4;">{msg}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # Backends supported by the runtime (`_build_phase_backend` in
@@ -285,9 +375,10 @@ def _render_main_backend(svc: SettingsService, settings: dict) -> None:
     elif sel in ("vllm", "vllm_offline"):
         st.caption(t("llm_models.phase.vllm.note"))
 
-    # Privacy banner for hosted backends.
-    if sel in ("openai", "claude", "openai_compatible"):
-        st.warning(t("llm_models.phase.hosted_privacy_warning"))
+    # AI-229: traffic-light privacy bar — shows where the user's data goes for
+    # the selected main backend (green = 100% local, red = internet in clear
+    # text, orange = internet but redacted once that feature ships).
+    _render_privacy_bar(sel, settings)
 
     col_save, col_test = st.columns(2)
     with col_save:
