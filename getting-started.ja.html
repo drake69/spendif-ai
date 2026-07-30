@@ -99,35 +99,34 @@
     </section>
     <section id="download">
       <h2><span class="step-num">1</span>お使いの OS 用にダウンロード</h2>
-      <p>公式インストーラーは各 <a href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">GitHub Release</a> のアセットとして公開されています。OS に合ったフォーマットを選んでください。</p>
 
       <div class="dl-grid">
         <div class="dl-card">
           <div class="os-icon">🍎</div>
           <h3>macOS</h3>
           <div class="ext">SpendifAi-*.dmg</div>
-          <a class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">DMG をダウンロード</a>
+          <a id="dl-mac" class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">DMG をダウンロード</a>
           <div class="dl-notes">macOS 12 Monterey 以降。Apple Silicon + Intel 対応。</div>
         </div>
         <div class="dl-card">
           <div class="os-icon">🪟</div>
           <h3>Windows</h3>
           <div class="ext">SpendifAi-*.msix</div>
-          <a class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">MSIX をダウンロード</a>
+          <a id="dl-win" class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">MSIX をダウンロード</a>
           <div class="dl-notes">Windows 10 1809+ / Windows 11。プレアルファ期間中はサイドロード + 信頼された証明書が必要です。</div>
         </div>
         <div class="dl-card">
           <div class="os-icon">🐧</div>
           <h3>Debian / Ubuntu</h3>
           <div class="ext">spendifai_*_amd64.deb</div>
-          <a class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">.deb をダウンロード</a>
+          <a id="dl-deb" class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">.deb をダウンロード</a>
           <div class="dl-notes">Ubuntu 22.04+, Debian 12+, Mint 21+。</div>
         </div>
         <div class="dl-card">
           <div class="os-icon">🎩</div>
           <h3>Fedora / RHEL</h3>
           <div class="ext">spendifai-*.rpm</div>
-          <a class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">.rpm をダウンロード</a>
+          <a id="dl-rpm" class="dl-btn" href="https://github.com/drake69/spendif-ai/releases/latest" target="_blank">.rpm をダウンロード</a>
           <div class="dl-notes">Fedora 40+, RHEL 9+, Rocky / Alma 9+。</div>
         </div>
       </div>
@@ -242,5 +241,34 @@
   <footer>
     <p>© 2026 Luigi Corsaro · Spendif.ai · MIT License · <a href="https://github.com/drake69/spendif-ai" target="_blank">GitHub のソースコード</a></p>
   </footer>
+  <!-- Direct-download: resolve the latest release assets and point each OS button at its file -->
+  <script>
+  (function () {
+    var MATCH = {
+      'dl-mac': function (n) { return /\.dmg$/i.test(n); },
+      'dl-win': function (n) { return /\.msix$/i.test(n); },
+      'dl-deb': function (n) { return /_amd64\.deb$/i.test(n); },
+      'dl-rpm': function (n) { return /\.rpm$/i.test(n); }
+    };
+    fetch('https://api.github.com/repos/drake69/spendif-ai/releases/latest', { headers: { 'Accept': 'application/vnd.github+json' } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (rel) {
+        var assets = (rel && rel.assets) || [];
+        Object.keys(MATCH).forEach(function (id) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          for (var i = 0; i < assets.length; i++) {
+            if (MATCH[id](assets[i].name)) {
+              el.href = assets[i].browser_download_url;
+              el.setAttribute('download', '');
+              el.removeAttribute('target');
+              break;
+            }
+          }
+        });
+      })
+      .catch(function () { /* keep the releases-page fallback href */ });
+  })();
+  </script>
 </body>
 </html>
