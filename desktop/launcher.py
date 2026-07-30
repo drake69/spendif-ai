@@ -493,6 +493,10 @@ def _start_streamlit(port: int, app_dir: Path) -> subprocess.Popen:
     env = os.environ.copy()
     env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
     env["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
+    # Nasconde le voci sviluppatore della toolbar (Deploy, ecc.) ma TIENE il menu
+    # utente con Settings->Tema. "viewer" (non "minimal", che toglieva anche il tema).
+    # Via env così vale anche nel bundle, dove .streamlit/config.toml può non esserci.
+    env["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "viewer"
 
     popen_kwargs = {"env": env, "cwd": str(app_dir)}
     if sys.platform != "win32":

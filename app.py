@@ -123,8 +123,9 @@ if not _cfg_check.is_onboarding_done() or _in_step6:
             padding-top: 2rem;
             padding-bottom: 4rem;
         }
-        /* Streamlit injects a small "Manage app" button — hide it too */
-        .stDeployButton { display: none !important; }
+        /* Streamlit injects a small "Manage app"/"Deploy" button — hide it too.
+           Both the legacy class and the current testid (Streamlit rinomina spesso). */
+        .stDeployButton, [data-testid="stAppDeployButton"] { display: none !important; }
         </style>
     """, unsafe_allow_html=True)
 

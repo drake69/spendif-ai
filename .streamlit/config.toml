@@ -1,0 +1,7 @@
+# Streamlit client config.
+# toolbarMode = "viewer": nasconde le voci da SVILUPPATORE (bottone "Deploy",
+# Clear cache, Record, Developer options) ma TIENE il menu utente ☰ con
+# Settings -> Tema (dark/light/system), Print, About. "minimal" invece toglieva
+# anche il tema. Applicato globalmente, indipendente dai selettori CSS.
+[client]
+toolbarMode = "viewer"
