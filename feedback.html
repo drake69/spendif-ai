@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Vemetric Analytics (obbligatorio su ogni pagina gh-pages) -->
+  <script>
+    window.vmtrcq = window.vmtrcq || [];
+    window.vmtrc = window.vmtrc || function (){window.vmtrcq.push(Array.prototype.slice.call(arguments))};
+  </script>
+  <script defer src="https://cdn.vemetric.com/main.js" id="vmtrc-scr" data-token="o10JyrtkgQ8RAn1q"></script>
+
+  <title>Spendif.ai — Com'è andata?</title>
+  <!-- Pagina riservata: fuori dai motori di ricerca -->
+  <meta name="robots" content="noindex, nofollow" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Palette GitHub-dark, coerente con la landing Spendif.ai */
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --surface2: #21262d;
+      --border:   #30363d;
+      --blue:     #58a6ff;
+      --green:    #3fb950;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --radius:   12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── NAV ─────────────────────────────────────────────────── */
+    nav {
+      background: rgba(13,17,23,0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      flex-shrink: 0;
+    }
+    .nav-logo {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .nav-logo span { color: var(--blue); }
+    .nav-badge {
+      font-size: .75rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--green);
+      padding: .2rem .7rem;
+      border-radius: 100px;
+      letter-spacing: .04em;
+      font-weight: 600;
+    }
+
+    /* ── MAIN ────────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 620px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 1rem;
+      text-align: center;
+    }
+    h1 {
+      font-size: clamp(1.5rem, 4vw, 2rem);
+      font-weight: 800;
+      letter-spacing: -.02em;
+      margin-bottom: .6rem;
+    }
+    .sub {
+      color: var(--muted);
+      max-width: 440px;
+      margin: 0 auto 2rem;
+      font-size: 1rem;
+    }
+
+    /* ── TALLY EMBED ─────────────────────────────────────────── */
+    .form-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .5rem;
+      text-align: left;
+    }
+    .form-wrap iframe {
+      width: 100%;
+      border: 0;
+      /* dynamicHeight aggiorna l'altezza da solo; questo è solo il valore iniziale */
+      min-height: 520px;
+      background: transparent;
+    }
+
+    /* ── FOOTER ──────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: .82rem;
+      flex-shrink: 0;
+    }
+    footer a { color: var(--blue); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a class="nav-logo" href="https://drake69.github.io/spendif-ai/">💸 Spendif<span>.ai</span></a>
+    <span class="nav-badge">🧪 Alpha · Solo amici</span>
+  </nav>
+
+  <!-- MAIN -->
+  <main>
+    <h1>Allora, com'è andata?</h1>
+    <p class="sub">30 secondi, giuro 🙏 &nbsp;Una domanda sola, poi se ti va lasciami due righe.</p>
+
+    <div class="form-wrap">
+      <!-- Tally form LZBVPy (https://tally.so/r/LZBVPy) -->
+      <iframe
+        data-tally-src="https://tally.so/embed/LZBVPy?alignLeft=1&hideTitle=1&transparentBackground=1&dynamicHeight=1"
+        loading="lazy"
+        title="Feedback Spendif.ai"></iframe>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>Grazie per il tuo tempo 🙏 · <a href="https://drake69.github.io/spendif-ai/">← torna a Spendif.ai</a></p>
+  </footer>
+
+  <!-- Tally embed loader -->
+  <script src="https://tally.so/widgets/embed.js" defer></script>
+</body>
+</html>
