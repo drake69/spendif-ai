@@ -39,7 +39,7 @@ La configurazione viene salvata nel database (`user_settings`) e persiste tra i 
 
 ## 🍎 Mac One-Click — Installazione automatica (consigliata)
 
-**Prerequisiti:** macOS 12+, Python 3.11+, connessione internet
+**Prerequisiti:** macOS 12+, Python 3.12+, connessione internet
 
 1. Scarica `install_spendifai.command` dal [repository](https://github.com/drake69/spendif-ai)
 2. **Double-click** sul file in Finder
@@ -64,7 +64,7 @@ llama.cpp su Mac usa l'accelerazione **Metal (Apple Silicon)** automaticamente. 
 
 ### Prerequisiti
 
-- **Python >= 3.13** — verifica con `python3 --version`. Su macOS: `brew install python@3.13`
+- **Python >= 3.12** — verifica con `python3 --version`. Su macOS: `brew install python@3.13`
 - **Git**
 
 ### Step 1 — Clona il repository
@@ -161,7 +161,7 @@ Stessa procedura del Mac. llama.cpp supporta automaticamente GPU NVIDIA (CUDA) s
 
 ### Prerequisiti
 
-- **Python >= 3.13** — verifica con `python3 --version`. Su Ubuntu/Debian: `sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.13 python3.13-venv`
+- **Python >= 3.12** — verifica con `python3 --version`. Su Ubuntu/Debian: `sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.13 python3.13-venv`
 - **Git** — `sudo apt install git`
 - **curl** — `sudo apt install curl`
 

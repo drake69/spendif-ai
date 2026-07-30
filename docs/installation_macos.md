@@ -13,7 +13,7 @@
 | macOS | 12 Monterey | 13 Ventura or later |
 | RAM | 8 GB | 16 GB (for 12B parameter LLM) |
 | Disk | 5 GB free | 10 GB (models + data) |
-| Python | 3.11 | 3.13 (installed by `--brew` mode) |
+| Python | 3.12 | 3.13 (installed by `--brew` mode) |
 | Xcode CLT | required | required |
 | Homebrew | optional | needed only for `--brew` mode |
 
@@ -69,7 +69,7 @@ manager) is downloaded automatically if absent.
 **Pros:**
 - No Homebrew required — zero dependencies beyond `git` and `curl`
 - Faster setup (no package manager bootstrap)
-- Works identically on any Python >= 3.11
+- Works identically on any Python >= 3.12
 
 **Cons:**
 - Python version depends on what you already have installed
@@ -342,7 +342,7 @@ command above.
 
 **Symptom:**
 ```
-✖  Python 3.9 found, but >= 3.11 required.
+✖  Python 3.9 found, but >= 3.12 required.
 ```
 
 **Fix — option A:** use Homebrew mode to get Python 3.13:
