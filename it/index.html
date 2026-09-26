@@ -935,7 +935,7 @@
     <div class="problem-grid fade-in">
       <div class="problem-card">
         <h3>😩 La routine mensile che tutti odiano</h3>
-        <p>Tre file movimenti da tre portali bancari diversi, esportazioni CSV con
+        <p>Tre file di movimenti da tre portali bancari diversi, esportazioni CSV con
         strutture incompatibili, date in formati eterogenei, importi con segni
         inconsistenti. Unirli a mano richiede ore e genera sempre errori.</p>
       </div>
@@ -984,7 +984,7 @@
       </div>
       <div class="step">
         <h3>Guarda dove vanno i tuoi soldi</h3>
-        <p>Il ledger unificato mostra tutto in un unico posto: grafici, filtri,
+        <p>Il registro unificato mostra tutto in un unico posto: grafici, filtri,
         esportazioni e la certezza che ogni euro viene contato <strong>una volta
         sola</strong>.</p>
       </div>
@@ -998,7 +998,7 @@
 <section id="schermate">
   <div class="container">
     <div class="section-label">Com'è fatto</div>
-    <h2>Il prodotto, non un mockup</h2>
+    <h2>Un prodotto, non una simulazione</h2>
     <p class="section-sub">Tre schermate dell'app in funzione. I dati mostrati sono di esempio.</p>
 
     <div class="shots fade-in">
@@ -1038,7 +1038,7 @@
         Spendif.ai riconosce la relazione e rimuove il doppio conteggio automaticamente.</p>
         <p style="margin-top:.75rem; color: var(--muted); font-size:.88rem;">
           Finestra temporale ±45 giorni · 3 fasi di abbinamento:
-          finestra scorrevole → subset sum per importi frazionati → riconciliazione parziale
+          finestra scorrevole → somma parziale per importi frazionati → riconciliazione parziale
         </p>
       </div>
       <div class="diff-card">
@@ -1052,7 +1052,7 @@
       <div class="diff-card">
         <div class="tag">Dedup</div>
         <h3>Deduplicazione idempotente</h3>
-        <p>Ogni transazione ha un ID univoco calcolato sul contenuto (SHA-256).
+        <p>Ogni transazione ha un identificativo univoco calcolato sul contenuto (SHA-256).
         Se importi lo stesso file due volte, non accade nulla.
         Puoi reimportare tutta la storia bancaria senza paura di duplicati.</p>
       </div>
@@ -1062,9 +1062,9 @@
         <p>La categorizzazione usa quattro livelli in sequenza:</p>
         <ul class="cascade-list">
           <li><span class="num">1</span><span><strong>Le tue regole</strong>: "CONAD" → Alimentari (applicate retroattivamente)</span></li>
-          <li><span class="num">2</span><span><strong>Regex statiche</strong>: pattern predefiniti per le categorie comuni</span></li>
-          <li><span class="num">3</span><span><strong>LLM</strong>: per tutto il resto, AI locale o cloud</span></li>
-          <li><span class="num">4</span><span><strong>Fallback</strong>: "Da rivedere" se tutto il resto fallisce</span></li>
+          <li><span class="num">2</span><span><strong>Regex statiche</strong>: schemi predefiniti per le categorie comuni</span></li>
+          <li><span class="num">3</span><span><strong>Analisi</strong>: per tutto il resto, AI locale o cloud</span></li>
+          <li><span class="num">4</span><span><strong>Il piano B</strong>: "Da rivedere" se tutto il resto fallisce</span></li>
         </ul>
       </div>
     </div>
@@ -1083,7 +1083,7 @@
     <div class="privacy-grid fade-in">
       <div class="privacy-card">
         <div class="ico-big">🏠</div>
-        <h3>Offline per scelta predefinita</h3>
+        <h3>Funziona senza internet</h3>
         <p>Spendif.ai usa <strong>llama.cpp in locale</strong> in modo predefinito: un
         motore di AI che gira sul tuo computer, senza connessione internet. I tuoi
         movimenti non lasciano mai il tuo disco. Ollama è disponibile come alternativa
@@ -1091,8 +1091,8 @@
       </div>
       <div class="privacy-card">
         <div class="ico-big">🛡️</div>
-        <h3>Redazione PII automatica</h3>
-        <p>Se usi OpenAI o Claude, Spendif.ai rimuove automaticamente tutti i dati
+        <h3>Mascheramento automatico dei dati personali</h3>
+        <p>Se usi OpenAI o Claude, Spendif.ai maschera automaticamente tutti i dati
         identificativi prima di qualsiasi chiamata remota:</p>
         <div class="pii-chips">
           <span class="pii-chip">IBAN → &lt;ACCOUNT_ID&gt;</span>
