@@ -51,7 +51,10 @@ try:
     # loaded by path at runtime wants to arrive exactly as it was built, with
     # its own dependency on the system's Vulkan loader resolved on the machine
     # that has a driver, which is the user's and not ours.
-    _carried = sorted(_llama_lib.glob("libggml-*"))
+    # The names follow ggml's own loader: libggml-*.so on Linux and macOS,
+    # ggml-*.dll on Windows, with no "lib" prefix. Matching only the first
+    # would leave the Windows bundle without Vulkan, quietly.
+    _carried = sorted(set(_llama_lib.glob("libggml-*")) | set(_llama_lib.glob("ggml-*")))
     for _plugin in _carried:
         llama_datas.append((str(_plugin), "llama_cpp/lib"))
     print(f"desktop.spec: carrying {len(_carried)} ggml files from {_llama_lib}: "
