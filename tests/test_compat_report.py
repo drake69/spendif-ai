@@ -83,7 +83,7 @@ def test_schema_1_reports_still_read():
     '<spendifai_report schema="99"/>',
     '<spendifai_report schema="2"><unclosed></spendifai_report>',
     "<spendifai_report schema=\"2\">" + "a" * (70 * 1024) + "</spendifai_report>",
-])
+], ids=["doctype-entity", "other-root", "unknown-schema", "malformed", "oversized"])
 def test_unreadable_or_hostile_reports_are_refused(xml):
     with pytest.raises(compat.ReportError):
         compat.parse_report(xml)
