@@ -185,8 +185,14 @@ a = Analysis(
 # documentazione ufficiale lo dichiara "not recommended for Windows", e il
 # 2026-09-22 e' costato un pacchetto MSIX che si installava e non partiva:
 # python312.dll rovinato, LoadLibrary "Invalid access to memory location",
-# nessun log perche' Python non arrivava a girare. Su macOS resta attivo.
-STRIP = sys.platform != "win32"
+# nessun log perche' Python non arrivava a girare.
+#
+# Su Linux lo strip rovina le librerie delle wheel manylinux: auditwheel le ha
+# gia' riscritte con patchelf, e lo strip GNU ne sposta i segmenti. Il
+# 2026-09-25 il .deb partiva su debian:12 e moriva importando numpy:
+# "libscipy_openblas64_...so: ELF load command address/offset not
+# page-aligned". Resta attivo solo su macOS.
+STRIP = sys.platform == "darwin"
 
 pyz = PYZ(a.pure)
 
