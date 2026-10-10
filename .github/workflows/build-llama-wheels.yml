@@ -482,7 +482,12 @@ jobs:
     # The same wheel as on Linux, built on Windows: the processor and Vulkan
     # side by side as plugins, so one bundle covers AMD, Intel and NVIDIA.
     name: windows-wheel (x64)
-    if: inputs.windows != false
+    # Compared as text on purpose. Started by a pull request or by hand there
+    # are no inputs, and the expression language turns both a missing value
+    # and false into 0: "inputs.windows != false" skipped the job exactly
+    # when it was meant to run. format() gives '' for missing, 'false' only
+    # when a caller said so.
+    if: format('{0}', inputs.windows) != 'false'
     runs-on: windows-latest
     defaults:
       run:
