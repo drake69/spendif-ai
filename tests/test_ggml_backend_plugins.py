@@ -112,3 +112,57 @@ def test_the_plugins_are_registered_before_the_model_is_built():
         "the model is built before the accelerators are registered, so it is "
         "offered only the ones that were linked at build time"
     )
+
+
+class _Library:
+    """A loaded library that exports only the functions it is given."""
+
+    def __init__(self, **exports):
+        self._exports = exports
+
+    def __getattr__(self, name):
+        try:
+            return self._exports[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+
+def test_a_ggml_function_is_found_where_windows_exports_it(monkeypatch):
+    """On Windows llama.dll does not export the ggml loader; ggml.dll does.
+
+    Linux and macOS resolve a symbol through the dependencies of the library
+    asked, so asking libllama always worked there. Windows answers only for the
+    one DLL, and asking llama.dll alone loaded no plugin and listed no device.
+    """
+    from core import runtime_info
+
+    loader = object()
+    llama_dll = _Library()
+    ggml_dll = _Library(ggml_backend_load_all_from_path=loader)
+    monkeypatch.setattr(runtime_info, "_ggml_libraries", lambda: [ggml_dll, llama_dll])
+
+    assert runtime_info.ggml_function("ggml_backend_load_all_from_path") is loader
+    assert runtime_info.ggml_function("not_exported_anywhere") is None
+
+
+def test_devices_are_listed_across_the_two_ggml_libraries(monkeypatch):
+    """The registry is in ggml.dll and the device names in ggml-base.dll."""
+    from core import runtime_info
+
+    names = {0: b"Vulkan0", 1: b"CPU"}
+
+    class _Fn:
+        def __init__(self, fn):
+            self._fn = fn
+
+        def __call__(self, *args):
+            return self._fn(*args)
+
+    ggml_dll = _Library(
+        ggml_backend_dev_count=_Fn(lambda: 2),
+        ggml_backend_dev_get=_Fn(lambda i: i),
+    )
+    base_dll = _Library(ggml_backend_dev_name=_Fn(lambda d: names[d]))
+    monkeypatch.setattr(runtime_info, "_ggml_libraries", lambda: [ggml_dll, base_dll, _Library()])
+
+    assert runtime_info._ggml_devices() == ["Vulkan0", "CPU"]

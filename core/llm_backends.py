@@ -774,10 +774,13 @@ def load_ggml_backend_plugins() -> list[str]:
         from pathlib import Path as _Path
 
         import llama_cpp
-        import llama_cpp.llama_cpp as C
+
+        from core import runtime_info
 
         lib_dir = _Path(llama_cpp.__file__).parent / "lib"
-        loader = getattr(C._lib, "ggml_backend_load_all_from_path", None)
+        # Not C._lib: on Windows llama.dll does not export the ggml loader,
+        # which lives in ggml.dll. See runtime_info._ggml_libraries.
+        loader = runtime_info.ggml_function("ggml_backend_load_all_from_path")
         if loader is None or not lib_dir.is_dir():
             # An older library, or a layout without a lib directory. Both mean
             # link-time backends, which are already registered.

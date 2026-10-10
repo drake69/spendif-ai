@@ -564,22 +564,26 @@ jobs:
           set -euo pipefail
           python -m venv "${RUNNER_TEMP}/probe"
           "${RUNNER_TEMP}/probe/Scripts/pip" install --quiet dist/llama_cpp_python-*.whl
+          # Asked of ggml.dll and ggml-base.dll, not of llama.dll: on Windows a
+          # DLL answers only for what it exports itself, and the loader and the
+          # device functions live in the two ggml libraries.
           "${RUNNER_TEMP}/probe/Scripts/python" - <<'PY'
           import ctypes, pathlib
           import llama_cpp
-          import llama_cpp.llama_cpp as C
+          from llama_cpp._ggml import libggml
 
           lib_dir = pathlib.Path(llama_cpp.__file__).parent / "lib"
-          loader = C._lib.ggml_backend_load_all_from_path
+          base = ctypes.CDLL(str(lib_dir / "ggml-base.dll"))
+          loader = libggml.ggml_backend_load_all_from_path
           loader.argtypes = [ctypes.c_char_p]
           loader(str(lib_dir).encode())
 
-          count = C._lib.ggml_backend_dev_count
+          count = libggml.ggml_backend_dev_count
           count.restype = ctypes.c_size_t
-          get = C._lib.ggml_backend_dev_get
+          get = libggml.ggml_backend_dev_get
           get.argtypes = [ctypes.c_size_t]
           get.restype = ctypes.c_void_p
-          name = C._lib.ggml_backend_dev_name
+          name = base.ggml_backend_dev_name
           name.argtypes = [ctypes.c_void_p]
           name.restype = ctypes.c_char_p
 
@@ -674,6 +678,11 @@ jobs:
           done
 
       - name: It starts, and finds its backends
+        # The probe goes through the product's own loader, not a copy of it:
+        # that is the code that failed to find the plugins on Windows, and the
+        # processor must come out registered. With the backends as plugins,
+        # no CPU device means no model can be built at all.
+        #
         # The executable is built without a console, so it has no stdout to
         # print to: the probe writes its answer to a file and the step reads
         # it. Every failure leaves through os._exit, because an exception that
@@ -691,30 +700,19 @@ jobs:
           import os, sys
           out = sys.argv[1]
           try:
-              import ctypes, pathlib, platform
+              import pathlib, platform
               import llama_cpp
-              import llama_cpp.llama_cpp as C
+              from core import llm_backends
               lib = pathlib.Path(llama_cpp.__file__).parent.joinpath('lib')
               found = sorted(p.name for p in lib.glob('ggml-*'))
-              loader = C._lib.ggml_backend_load_all_from_path
-              loader.argtypes = [ctypes.c_char_p]
-              loader(str(lib).encode())
-              count = C._lib.ggml_backend_dev_count
-              count.restype = ctypes.c_size_t
-              get = C._lib.ggml_backend_dev_get
-              get.argtypes = [ctypes.c_size_t]
-              get.restype = ctypes.c_void_p
-              name = C._lib.ggml_backend_dev_name
-              name.argtypes = [ctypes.c_void_p]
-              name.restype = ctypes.c_char_p
-              devices = [name(get(i)).decode() for i in range(count())]
-              ok = any('vulkan' in n for n in found)
+              devices = llm_backends.load_ggml_backend_plugins()
+              ok = any('vulkan' in n for n in found) and any(d.upper() == 'CPU' for d in devices)
               with open(out, 'w') as f:
                   f.write('python ' + platform.python_version() + '\n')
                   f.write('backends: ' + ', '.join(found) + '\n')
                   f.write('registered on this runner: ' + (', '.join(devices) or 'none') + '\n')
                   if not ok:
-                      f.write('no Vulkan backend in the bundle\n')
+                      f.write('expected the Vulkan plugin in the bundle and the processor registered\n')
               os._exit(0 if ok else 1)
           except BaseException as exc:
               with open(out, 'w') as f:
