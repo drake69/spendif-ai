@@ -300,6 +300,16 @@ StartupWMClass=spendifai
 Keywords=finance;budget;bank;expense;
 DESKTOP
 
+# ── Lintian overrides ────────────────────────────────────────────────────────
+# One file, named by path, rather than a tag switched off for the whole
+# package: the same tag on one of our own libraries would still fail.
+# CPython's _statistics extension only calls into libm, so it carries no libc
+# dependency, and that is how upstream builds it.
+mkdir -p "${PKG_ROOT}/usr/share/lintian/overrides"
+cat > "${PKG_ROOT}/usr/share/lintian/overrides/spendifai" <<'OVERRIDES'
+spendifai: library-not-linked-against-libc [opt/spendifai/_internal/python3.*/lib-dynload/_statistics.cpython-*.so]
+OVERRIDES
+
 # ── Set permissions ──────────────────────────────────────────────────────────
 # Directories readable, data files readable, programs executable. A blanket
 # 644 over a bundle strips the executable bit from the launcher, and the
