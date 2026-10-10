@@ -40,7 +40,7 @@ import platform
 import re
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from xml.etree import ElementTree as ET
 
 logger = logging.getLogger("SPENDIFY")
@@ -63,6 +63,20 @@ ISSUE_TEMPLATE = "test_report.yml"
 # not an unlimited number. Past this the form opens empty and the page says to
 # paste the document, rather than producing a link that fails on some systems.
 _MAX_ISSUE_URL = 7500
+
+# The same address the page offers for help. A test report sent there is read
+# by the same script as one filed on GitHub, from the saved email.
+REPORT_MAIL_ADDRESS = "support@spendif.ai"
+
+# The steps a tester ticks, worded exactly as in the issue form: the script
+# that reads reports matches these labels, in the form and in an email alike,
+# so they stay in English whatever the language of the page.
+TEST_OUTCOMES = (
+    "Installed",
+    "Started from the application menu or icon",
+    "Imported a statement",
+    "Uninstalled cleanly",
+)
 
 _PHASE_COLUMNS = ("header_detection", "classifying", "footer_detection",
                   "extracting", "cleaning", "categorizing")
@@ -353,3 +367,18 @@ def issue_url(report: dict[str, Any], xml: str) -> tuple[str, bool]:
     if len(full) <= _MAX_ISSUE_URL:
         return full, True
     return f"{ISSUE_FORM_URL}?{urlencode(base)}", False
+
+
+def mail_url(report: dict[str, Any], intro: str) -> str:
+    """A mailto address for sending a test report without a GitHub account.
+
+    The subject carries the same self-describing name as the file, and the
+    body the four steps as a checklist in the format the issue form produces,
+    so the saved email can be read into the compatibility table as it is.
+    The document itself travels as an attachment: a mailto link cannot attach
+    a file, and a whole report in the body is past what mail clients accept.
+    """
+    subject = "Test report: " + report_filename(report).removesuffix(".xml")
+    body = intro + "\n\n" + "\n".join(f"- [ ] {label}" for label in TEST_OUTCOMES) + "\n"
+    return f"mailto:{REPORT_MAIL_ADDRESS}?subject={quote(subject)}&body={quote(body)}"
+

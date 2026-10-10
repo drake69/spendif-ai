@@ -88,6 +88,8 @@ gh run download <RUN_ID> --name windows-msix --dir dist/
 #   rpm-package    →  spendifai-<ver>-1.x86_64.rpm  (attualmente fallisce — vedi §6)
 ```
 
+Build di prova da `develop`, con i comandi per scaricarle e avviarle su ogni sistema e per mandare il resoconto di prova: [test_builds.it.md](test_builds.it.md).
+
 ---
 
 ## 3. Installazione dell'MSIX su una VM Windows
