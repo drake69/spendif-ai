@@ -82,7 +82,19 @@ jobs:
           # self-contained and does not integrate into /usr. VS Code, Signal
           # and Chrome all install there and all trip this tag. The reasoning
           # is in the header of packaging/linux/build-deb.sh.
-          lintian --fail-on error --no-tag-display-limit                   --suppress-tags dir-or-file-in-opt                   build/spendifai_9.9.9_amd64.deb
+          #
+          # Two more are suppressed for the same kind of reason: they describe
+          # what a self-contained bundle is, not a defect in this one.
+          #   unstripped-binary-or-object - strip is off on purpose. On the
+          #     manylinux libraries it moves segments and the loader refuses
+          #     them ("ELF load command address/offset not page-aligned"):
+          #     the package installed and died importing numpy.
+          #   embedded-library - the bundle carries its own copies of zlib and
+          #     bzip2 inside Python and its wheels. Not using the system ones
+          #     is the point of a bundle, the same trade VS Code and Chrome make.
+          lintian --fail-on error --tag-display-limit 0 \
+            --suppress-tags dir-or-file-in-opt,unstripped-binary-or-object,embedded-library \
+            build/spendifai_9.9.9_amd64.deb
 
       - name: Generate a throwaway signing key
         run: |

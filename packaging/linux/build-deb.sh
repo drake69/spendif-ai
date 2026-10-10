@@ -301,15 +301,17 @@ Keywords=finance;budget;bank;expense;
 DESKTOP
 
 # ── Set permissions ──────────────────────────────────────────────────────────
-# /opt/spendifai is read-only source code; per-user venv lives in
-# ~/.spendifai/.venv (created by launch.sh on first run).
-# Directories readable, data files readable, and everything that has to run
-# left alone. A blanket 644 over a bundle strips the executable bit from the
-# launcher and from every shared library, and the package then installs
-# perfectly and cannot start.
+# Directories readable, data files readable, programs executable. A blanket
+# 644 over a bundle strips the executable bit from the launcher, and the
+# package then installs perfectly and cannot start.
+#
+# Shared libraries are the exception that looks like a program and is not:
+# the dynamic loader and dlopen read them, they never execute them, so they
+# need no executable bit. Debian Policy wants them 0644, and lintian fails the
+# build on shared-library-is-executable otherwise.
 find "${INSTALL_ROOT}" -type d -exec chmod 755 {} +
-find "${INSTALL_ROOT}" -type f ! -perm -u+x ! -name "*.so*" -exec chmod 644 {} +
-find "${INSTALL_ROOT}" -type f \( -perm -u+x -o -name "*.so*" \) -exec chmod 755 {} +
+find "${INSTALL_ROOT}" -type f -perm -u+x ! -name "*.so" ! -name "*.so.*" -exec chmod 755 {} +
+find "${INSTALL_ROOT}" -type f \( ! -perm -u+x -o -name "*.so" -o -name "*.so.*" \) -exec chmod 644 {} +
 # launch.sh MUST be executable — it's the .desktop file's Exec target.
 # (The generic 0644 find above clobbers the chmod inside the heredoc.)
 chmod 0755 "${INSTALL_ROOT}/launch.sh"

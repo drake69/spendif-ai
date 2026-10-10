@@ -323,6 +323,33 @@ jobs:
       - name: Build the bundle
         run: uv run --no-sync --extra desktop pyinstaller desktop.spec --noconfirm --clean
 
+      - name: No library search path that points at this runner
+        # The interpreter from setup-python is built with a RUNPATH into the
+        # runner's tool cache, /opt/hostedtoolcache/..., and PyInstaller copies
+        # it into every extension module. On a user's machine that directory
+        # does not exist, so nothing breaks; but a search path into /opt that
+        # nobody controls is one more place the loader looks for a library,
+        # and lintian rightly fails the package on it.
+        #
+        # patchelf only edits the dynamic section here. It does not move
+        # segments, which is what strip did to the manylinux libraries.
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends patchelf
+          fixed=0
+          while IFS= read -r -d '' f; do
+            rp=$(patchelf --print-rpath "$f" 2>/dev/null) || continue
+            case "$rp" in
+              *hostedtoolcache*) patchelf --remove-rpath "$f"; fixed=$((fixed + 1)) ;;
+            esac
+          done < <(find dist/SpendifAi -type f \( -name "*.so" -o -name "*.so.*" -o -perm -u+x \) -print0)
+          echo "search paths removed from ${fixed} files"
+          while IFS= read -r -d '' f; do
+            if patchelf --print-rpath "$f" 2>/dev/null | grep -q hostedtoolcache; then
+              echo "still points at the runner: $f"; exit 1
+            fi
+          done < <(find dist/SpendifAi -type f \( -name "*.so" -o -name "*.so.*" -o -perm -u+x \) -print0)
+
       - name: The accelerators travel with it
         # The same check as on the wheel, one step later: a bundle that leaves
         # the plugins behind starts, runs on the processor, and says nothing.
