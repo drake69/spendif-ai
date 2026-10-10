@@ -20,7 +20,7 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy.orm import sessionmaker
 
-from services.diagnostics_service import collect, issue_url, report_filename, to_xml
+from services.diagnostics_service import collect, issue_url, mail_url, report_filename, to_xml
 from services.settings_service import SettingsService
 from ui.i18n import t
 
@@ -141,6 +141,11 @@ def render_diagnostics_page(engine) -> None:
     st.link_button(t("diagnostics.open_issue"), url, help=t("diagnostics.open_issue_help"))
     if not fits:
         st.caption(t("diagnostics.open_issue_paste"))
+    # The same report without a GitHub account: an email whose body is the
+    # checklist, with the saved document attached by hand.
+    st.markdown(t("diagnostics.open_mail").format(
+        mailto=mail_url(report, t("diagnostics.mail_body_intro")),
+    ))
 
     # Where it goes, once they have it. Saying so here is the difference
     # between a file in the Downloads folder and a support request: the page

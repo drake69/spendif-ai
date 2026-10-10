@@ -9,6 +9,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - Test reports build the compatibility table on their own. The Diagnostics page opens a GitHub form already filled in with its technical report, and a workflow reads the report, adds the machine to `docs/compatibility.md` (and `docs/compatibility.it.md`) and proposes the change as a pull request. Nobody copies operating system, graphics card or timings by hand. The form is public, so the report is read as untrusted data: only named fields, capped in length, and nothing that can become a link or HTML in the table
 - The technical report names the distribution ("Debian GNU/Linux 13 (trixie)") instead of the kernel, and shows the last import on its own next to the average, so a run on the processor and one on the graphics card can be compared. The saved file says what is inside: `spendifai-report_0.3.1_debian-13_arm64_cpu_20261010-1432.xml`
+- A test matrix in `docs/compatibility.md` lists the configurations tested before a release and ticks each one from the reports that match it: done when a report says all four steps went through, partly done when some did not. The tick is computed, never typed. `docs/test_builds.md` gives the download and launch commands for every system
+- Test reports can also arrive by email, for testers without a GitHub account. The Diagnostics page offers an email whose body is the checklist of the four steps, with the saved document attached, and the saved email goes into the table through the same parser and the same checks as the form
+- Windows gets graphics card acceleration through Vulkan, as Linux already does, from one bundle that covers AMD, Intel and NVIDIA. The application also finds the inference library's plugins on Windows: it looked for the loader in a library that, on Windows, does not export it, so it would have loaded none and listed no device
 
 ## [0.3.1] - 2026-09-23
 

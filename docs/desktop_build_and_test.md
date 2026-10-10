@@ -87,6 +87,8 @@ gh run download <RUN_ID> --name windows-msix --dir dist/
 #   rpm-package    →  spendifai-<ver>-1.x86_64.rpm  (currently failing — see §6)
 ```
 
+Test builds from `develop`, with download and launch commands for every system and how to send the test report: [test_builds.md](test_builds.md).
+
 ---
 
 ## 3. Installing the MSIX on a Windows VM
