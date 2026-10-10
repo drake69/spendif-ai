@@ -92,6 +92,36 @@ def _emulated() -> bool:
         return False
 
 
+def _os_identity() -> tuple[str, str]:
+    """The operating system as a person names it, and as a short identifier.
+
+    platform.platform() names the kernel on Linux ("Linux-6.8.0-...-with-
+    glibc2.39"), which says nothing about whether the machine runs Debian 13
+    or Fedora 42, and that is the first thing a compatibility table needs.
+    The distribution describes itself in /etc/os-release; reading it is the
+    standard way, and it carries no personal data.
+
+    Returns e.g. ("Debian GNU/Linux 13 (trixie)", "debian-13"),
+    ("macOS 15.6", "macos-15.6"), ("Windows 11", "windows-11").
+    """
+    system = platform.system()
+    try:
+        if system == "Linux":
+            info = platform.freedesktop_os_release()
+            pretty = info.get("PRETTY_NAME") or info.get("NAME") or "Linux"
+            ident = "-".join(p for p in (info.get("ID", "linux"), info.get("VERSION_ID", "")) if p)
+            return pretty, ident
+        if system == "Darwin":
+            version = platform.mac_ver()[0]
+            return f"macOS {version}".strip(), f"macos-{version}" if version else "macos"
+        if system == "Windows":
+            release = platform.release()
+            return f"Windows {release}".strip(), f"windows-{release}" if release else "windows"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("runtime_info: cannot name the operating system (%s)", exc)
+    return system or "unknown", (system or "unknown").lower()
+
+
 def collect() -> dict[str, Any]:
     """Runtime facts, safe to show and to export.
 
@@ -99,8 +129,11 @@ def collect() -> dict[str, Any]:
     diagnostics report that crashes tells its reader nothing at all.
     """
     devices = _ggml_devices()
+    os_name, os_id = _os_identity()
     return {
         "os_version": platform.platform(),          # names the OS and its exact release
+        "os_name": os_name,                         # "Debian GNU/Linux 13 (trixie)"
+        "os_id": os_id,                             # "debian-13"
         "python_version": platform.python_version(),
         "python_implementation": platform.python_implementation(),
         # Distinguishes a packaged build, which carries its own interpreter,

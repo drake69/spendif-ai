@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Test reports build the compatibility table on their own. The Diagnostics page opens a GitHub form already filled in with its technical report, and a workflow reads the report, adds the machine to `docs/compatibility.md` (and `docs/compatibility.it.md`) and proposes the change as a pull request. Nobody copies operating system, graphics card or timings by hand. The form is public, so the report is read as untrusted data: only named fields, capped in length, and nothing that can become a link or HTML in the table
+- The technical report names the distribution ("Debian GNU/Linux 13 (trixie)") instead of the kernel, and shows the last import on its own next to the average, so a run on the processor and one on the graphics card can be compared. The saved file says what is inside: `spendifai-report_0.3.1_debian-13_arm64_cpu_20261010-1432.xml`
+
 ## [0.3.1] - 2026-09-23
 
 ### Fixed
