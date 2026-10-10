@@ -2,43 +2,31 @@
 
 How to download a test build of Spendif.ai, launch it on each supported system and send back the report that ticks your configuration in the [test matrix](compatibility.md#test-matrix).
 
-Test builds come from the `develop` branch, before a release. They carry the version they were built from, for example `0.3.1+ga3a4c1a`: the part after `+g` is the commit. The application never offers them an update.
+Test builds come from the `develop` branch, before a release. They carry the version they were built from, for example `0.3.1+g9cac349`: the part after `+g` is the commit. The application never offers them an update.
 
-> [!NOTE]
-> Builds are kept for 14 days. Downloading them needs a GitHub account (any account, signed in), because GitHub serves build artifacts only to signed-in users. Without the `gh` command, open the [list of builds](https://github.com/spendifai/spendif-ai/actions/workflows/build-llama-wheels.yml?query=branch%3Adevelop+is%3Asuccess), pick the newest and download the artifact from the bottom of the page.
+The newest test build is always on the [test-build pre-release](https://github.com/spendifai/spendif-ai/releases/tag/test-build), at addresses that never change. No GitHub account and no extra tools are needed. It is not signed and is replaced by the next test build without notice.
 
 ## 1. Pick your configuration
 
-| System | Architecture | What you download | Section |
+| System | Architecture | Download | Section |
 |---|---|---|---|
-| Debian 12 and 13, Ubuntu 22.04 and newer, Linux Mint 21 and newer | amd64 (x86_64) | `spendifai-deb-amd64` | [2](#2-debian-ubuntu-linux-mint-deb) |
-| Debian 12 and 13, Ubuntu 22.04 and newer | arm64 (aarch64) | `spendifai-deb-arm64` | [2](#2-debian-ubuntu-linux-mint-deb) |
-| Fedora, Arch Linux, any other distribution with glibc 2.35 or newer | amd64 | `linux-bundle-amd64` | [3](#3-fedora-arch-linux-and-other-distributions-folder) |
-| Fedora, Arch Linux, any other distribution with glibc 2.35 or newer | arm64 | `linux-bundle-arm64` | [3](#3-fedora-arch-linux-and-other-distributions-folder) |
-| Windows 10 and 11 | x64 | `windows-bundle-x64` | [4](#4-windows-x64-folder) |
+| Debian 12 and 13, Ubuntu 22.04 and newer, Linux Mint 21 and newer | amd64 (x86_64) | [spendifai-test_amd64.deb](https://github.com/spendifai/spendif-ai/releases/download/test-build/spendifai-test_amd64.deb) | [2](#2-debian-ubuntu-linux-mint-deb) |
+| Debian 12 and 13, Ubuntu 22.04 and newer | arm64 (aarch64) | [spendifai-test_arm64.deb](https://github.com/spendifai/spendif-ai/releases/download/test-build/spendifai-test_arm64.deb) | [2](#2-debian-ubuntu-linux-mint-deb) |
+| Fedora, Arch Linux, any other distribution with glibc 2.35 or newer | amd64 | [SpendifAi-test-linux-amd64.tar.gz](https://github.com/spendifai/spendif-ai/releases/download/test-build/SpendifAi-test-linux-amd64.tar.gz) | [3](#3-fedora-arch-linux-and-other-distributions-folder) |
+| Fedora, Arch Linux, any other distribution with glibc 2.35 or newer | arm64 | [SpendifAi-test-linux-arm64.tar.gz](https://github.com/spendifai/spendif-ai/releases/download/test-build/SpendifAi-test-linux-arm64.tar.gz) | [3](#3-fedora-arch-linux-and-other-distributions-folder) |
+| Windows 10 and 11 | x64 | [SpendifAi-test-windows-x64.zip](https://github.com/spendifai/spendif-ai/releases/download/test-build/SpendifAi-test-windows-x64.zip) | [4](#4-windows-x64-folder) |
 
-Your architecture: `uname -m` on Linux (`x86_64` is amd64, `aarch64` is arm64). Windows on ARM is not covered: the local model does not run there.
+Your architecture: `uname -m` on Linux (`x86_64` is amd64, `aarch64` is arm64). Windows on ARM is not covered: the local model does not run there. Checksums: [SHA256SUMS](https://github.com/spendifai/spendif-ai/releases/download/test-build/SHA256SUMS).
 
 Fedora and Arch get the folder rather than a package for now: their `.rpm` and `PKGBUILD` have not yet moved to the self-contained build.
 
 ## 2. Debian, Ubuntu, Linux Mint (.deb)
 
 ```bash
-# Install the GitHub command line once, and sign in
-sudo apt install gh
-gh auth login
-
-# The newest successful test build
-REPO=spendifai/spendif-ai
-RUN=$(gh run list -R "$REPO" --workflow build-llama-wheels.yml --branch develop \
-      --status success -L 1 --json databaseId -q '.[0].databaseId')
-
-# The package for this machine
 ARCH=$(dpkg --print-architecture)          # amd64 or arm64
-rm -rf /tmp/spendifai && gh run download "$RUN" -R "$REPO" -n "spendifai-deb-$ARCH" -D /tmp/spendifai
-
-# Install
-sudo apt install /tmp/spendifai/spendifai_*.deb
+wget -O /tmp/spendifai-test.deb \
+  "https://github.com/spendifai/spendif-ai/releases/download/test-build/spendifai-test_${ARCH}.deb"
+sudo apt install /tmp/spendifai-test.deb
 ```
 
 **Launch:** from the applications menu, **Spendif.ai**. The interface opens in your browser: on Linux there is no separate window. From a terminal: `/opt/spendifai/launch.sh`.
@@ -63,23 +51,13 @@ Your data stays in `~/.spendifai`. Delete that folder only if it holds nothing b
 The folder runs where you put it, with no installation.
 
 ```bash
-# Install the GitHub command line once, and sign in
-sudo dnf install gh        # Fedora
-sudo pacman -S github-cli  # Arch
-gh auth login
-
-REPO=spendifai/spendif-ai
-RUN=$(gh run list -R "$REPO" --workflow build-llama-wheels.yml --branch develop \
-      --status success -L 1 --json databaseId -q '.[0].databaseId')
-
 case "$(uname -m)" in x86_64) ARCH=amd64 ;; aarch64) ARCH=arm64 ;; esac
-rm -rf ~/SpendifAi-test && gh run download "$RUN" -R "$REPO" -n "linux-bundle-$ARCH" -D ~/SpendifAi-test
-
-# The download loses the executable bit
-chmod +x ~/SpendifAi-test/SpendifAi
+rm -rf ~/SpendifAi
+curl -L "https://github.com/spendifai/spendif-ai/releases/download/test-build/SpendifAi-test-linux-${ARCH}.tar.gz" \
+  | tar -xz -C ~
 ```
 
-**Launch:** `~/SpendifAi-test/SpendifAi`. The interface opens in your browser.
+**Launch:** `~/SpendifAi/SpendifAi`. The interface opens in your browser.
 
 **Graphics card:**
 
@@ -94,35 +72,29 @@ sudo pacman -S vulkan-icd-loader nvidia-utils vulkan-tools
 vulkaninfo --summary
 ```
 
-**Uninstall:** `rm -rf ~/SpendifAi-test`. Your data stays in `~/.spendifai`.
+**Uninstall:** `rm -rf ~/SpendifAi`. Your data stays in `~/.spendifai`.
 
 For the report, a folder counts as installed once it starts, and as uninstalled once it is deleted. There is no menu entry: tick "Started" if it started from the file.
 
 ## 4. Windows x64 (folder)
 
-In PowerShell:
+With the browser: download [SpendifAi-test-windows-x64.zip](https://github.com/spendifai/spendif-ai/releases/download/test-build/SpendifAi-test-windows-x64.zip), right-click it, **Properties**, tick **Unblock**, **OK**, then **Extract All**. Open the `SpendifAi` folder and start `SpendifAi.exe`.
+
+Or in PowerShell:
 
 ```powershell
-# Install the GitHub command line once, and sign in
-winget install --id GitHub.cli
-gh auth login
-
-$REPO = "spendifai/spendif-ai"
-$RUN = gh run list -R $REPO --workflow build-llama-wheels.yml --branch develop `
-       --status success -L 1 --json databaseId -q '.[0].databaseId'
-
-$DEST = "$HOME\SpendifAi-test"
-if (Test-Path $DEST) { Remove-Item -Recurse -Force $DEST }
-gh run download $RUN -R $REPO -n windows-bundle-x64 -D $DEST
-
-& "$DEST\SpendifAi.exe"
+$ZIP = "$env:TEMP\SpendifAi-test.zip"
+Invoke-WebRequest -Uri "https://github.com/spendifai/spendif-ai/releases/download/test-build/SpendifAi-test-windows-x64.zip" -OutFile $ZIP
+if (Test-Path "$HOME\SpendifAi") { Remove-Item -Recurse -Force "$HOME\SpendifAi" }
+Expand-Archive -Path $ZIP -DestinationPath $HOME
+& "$HOME\SpendifAi\SpendifAi.exe"
 ```
 
-The build is not signed. If Windows SmartScreen stops it: **More info**, then **Run anyway**. If you downloaded the zip from the browser instead, right-click it, **Properties**, tick **Unblock**, then extract.
+The build is not signed. If Windows SmartScreen stops it: **More info**, then **Run anyway**.
 
 **Graphics card:** the Vulkan driver comes with the card's own driver (NVIDIA, AMD, Intel). Nothing to install separately.
 
-**Uninstall:** delete the folder, `Remove-Item -Recurse -Force "$HOME\SpendifAi-test"`. Your data stays in `%USERPROFILE%\.spendifai`.
+**Uninstall:** delete the folder, `Remove-Item -Recurse -Force "$HOME\SpendifAi"`. Your data stays in `%USERPROFILE%\.spendifai`.
 
 There is no Start menu entry: tick "Started" if it started from the file.
 
@@ -147,9 +119,30 @@ The four steps:
 
 A configuration gets ✅ in the test matrix when one report has all four, and ◐ when a report arrived with some missing.
 
-## For maintainers: an emailed report
+## 6. Other builds, from GitHub Actions
 
-Save the email as an `.eml` file (drag it out of the mail client), then:
+Every build of `develop` is also kept for 14 days as a build artifact, including the ones never published as the test build. Downloading those needs a signed-in GitHub account and the `gh` command:
+
+```bash
+gh auth login
+REPO=spendifai/spendif-ai
+RUN=$(gh run list -R "$REPO" --workflow build-llama-wheels.yml --branch develop \
+      --status success -L 1 --json databaseId -q '.[0].databaseId')
+gh run download "$RUN" -R "$REPO" -n spendifai-deb-amd64 -D /tmp/spendifai
+```
+
+Artifact names: `spendifai-deb-amd64`, `spendifai-deb-arm64`, `linux-bundle-amd64`, `linux-bundle-arm64`, `windows-bundle-x64`. A Linux folder downloaded this way loses its executable bit: `chmod +x SpendifAi/SpendifAi`.
+
+## For maintainers
+
+**Publishing a test build:** run the **Publish test build** workflow on `develop`. It builds the packages and replaces the files of the `test-build` pre-release; given the id of a finished **Build llama wheels** run of `develop` in `from_run`, it publishes that run's packages without building again.
+
+```bash
+gh workflow run publish-test-build.yml -R spendifai/spendif-ai --ref develop
+gh workflow run publish-test-build.yml -R spendifai/spendif-ai --ref develop -f from_run=<run id>
+```
+
+**An emailed report:** save the email as an `.eml` file (drag it out of the mail client), then:
 
 ```bash
 python3 scripts/compat_report.py --mail ~/Downloads/report.eml \

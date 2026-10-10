@@ -11,6 +11,9 @@ jobs:
   publish:
     name: Build & push ghcr.io/spendifai/spendif-ai
     runs-on: ubuntu-latest
+    # A pre-release is not an image anyone should pull. The test-build
+    # pre-release in particular is replaced on every test build of develop.
+    if: github.event_name != 'release' || github.event.release.prerelease == false
 
     permissions:
       contents: read
