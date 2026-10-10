@@ -157,23 +157,25 @@ jobs:
   #   blueprint/sw_artifacts/tools/codesign/sign_windows.sh
   # ─────────────────────────────────────────────────────────────────────────
   build-windows:
+    # Packs the bundle the shared workflow built, with our inference wheel and
+    # the Vulkan plugin inside, instead of running PyInstaller again here. A
+    # second PyInstaller run would install the dependencies from the lockfile,
+    # whose inference wheel has no accelerator, and the MSIX would run on the
+    # processor without saying so.
     name: Build Windows MSIX
-    needs: prepare
+    needs: [prepare, build-deb]
     runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+      - name: The bundle from the shared workflow
+        uses: actions/download-artifact@v4
         with:
-          version: "latest"
-          enable-cache: true
+          name: windows-bundle-x64
+          path: dist/SpendifAi
 
-      - name: Install dependencies (with desktop extras)
-        run: uv sync --extra desktop
-
-      - name: Build MSIX (PyInstaller + makeappx)
+      - name: Build MSIX (makeappx, from the bundle)
         env:
           # X.500 subject of the code signing certificate. Personal data of the
           # certificate holder, so it lives in a repository secret and never in
@@ -182,7 +184,7 @@ jobs:
           MSIX_PUBLISHER: ${{ secrets.MSIX_PUBLISHER }}
         run: |
           $version = "${{ needs.prepare.outputs.version }}"
-          .\packaging\windows\build-msix.ps1 -Version $version -Production
+          .\packaging\windows\build-msix.ps1 -Version $version -Production -SkipPyInstaller
 
       - name: Verify MSIX
         run: |
@@ -210,7 +212,9 @@ jobs:
     # for each architecture, and installs and starts it on Debian 12 before
     # anything is published. Rebuilding the wheel here, at every release, is
     # what keeps a release from shipping an old library unnoticed.
-    name: Build .deb
+    #
+    # The same workflow builds the Windows bundle that build-windows packs.
+    name: Build .deb and the Windows bundle
     needs: prepare
     uses: ./.github/workflows/build-llama-wheels.yml
     with:

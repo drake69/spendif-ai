@@ -44,6 +44,9 @@ jobs:
     uses: ./.github/workflows/build-llama-wheels.yml
     with:
       app_version: 9.9.9
+      # The archive carries .deb files only; the Windows build would cost an
+      # hour of runner time here and prove nothing about apt.
+      windows: false
 
   validate:
     name: Generated archive works with a real apt
