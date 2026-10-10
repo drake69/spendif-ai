@@ -1,4 +1,6 @@
-# Builds the inference library ourselves, with the accelerators as plugins.
+# Builds the inference library ourselves, with the accelerators as plugins,
+# and carries it all the way to a Linux package that runs on a machine we have
+# never had.
 #
 # WHY WE BUILD IT AT ALL
 #   In the upstream wheels the backend is a link-time dependency of libllama,
@@ -15,23 +17,48 @@
 #
 # THE PRICE, SAID OUT LOUD
 #   From here on the wheels are an artefact of ours, with a build step that can
-#   fail and a version that can fall behind. If nobody remembers to rebuild
-#   them at a release, the package ships an old library and nothing looks
-#   wrong, because it works.
+#   fail and a version that can fall behind. That is why this workflow is also
+#   called by the release and by the APT archive check: the wheel is rebuilt
+#   every time a package is made, so a release cannot ship an old library
+#   because somebody forgot to rebuild it.
 #
-# WHAT THIS JOB CAN AND CANNOT PROVE
-#   It can prove the plugin was built and travels inside the wheel. It cannot
-#   prove a graphics card is used: a hosted runner has no Vulkan driver, so
-#   asking the library to enumerate devices here would report the processor
-#   and nothing else, whether or not the build is good. Device selection and
-#   the speed it buys are verified on a machine with a real card.
+# TWO ARCHITECTURES, ONE RECIPE
+#   amd64 and arm64 are built the same way, each on a native runner. Both use
+#   Ubuntu 22.04, because the glibc of the build machine decides how far the
+#   artefact reaches: 2.35 covers Debian 12, Ubuntu 22.04 and Mint 21 as well
+#   as everything newer.
+#
+#   22.04 has no shader compiler in its archive, and the LunarG repository that
+#   filled the gap publishes amd64 only and stopped updating in May 2025. The
+#   compiler is therefore built here from Google's own sources, at a pinned
+#   tag, and the Vulkan headers come from Khronos the same way. No third-party
+#   binary enters the build, and the result is cached, so the cost is paid once
+#   per tag and architecture.
+#
+# WHAT THIS WORKFLOW CAN AND CANNOT PROVE
+#   It can prove the plugin was built, travels inside the wheel, survives into
+#   the bundle and the package, and that the package installs and starts on
+#   Debian 12. It cannot prove a graphics card is used: a hosted runner has no
+#   Vulkan driver, so asking the library to enumerate devices here would report
+#   the processor and nothing else, whether or not the build is good. Device
+#   selection and the speed it buys are verified on a machine with a real card.
 #
 #   This distinction is the reason the verification below looks at the contents
-#   of the wheel rather than at a list of devices. A Vulkan build that silently
-#   falls back to the processor looks exactly like a working one.
+#   of each artefact rather than at a list of devices. A Vulkan build that
+#   silently falls back to the processor looks exactly like a working one.
 name: Build llama wheels
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: "llama-cpp-python version to build (must match uv.lock)"
+        type: string
+        default: "0.3.35"
+      app_version:
+        description: "Version written into the Debian package (default: the VERSION file)"
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       version:
@@ -41,43 +68,88 @@ on:
   pull_request:
     paths:
       - .github/workflows/build-llama-wheels.yml
+      - desktop.spec
+      - packaging/linux/build-deb.sh
+      - packaging/linux/launch.sh
 
 permissions:
   contents: read
 
+env:
+  # Bumped together, by hand, and the cache key follows them.
+  SHADERC_TAG: v2026.4
+  VULKAN_HEADERS_TAG: v1.4.365
+  VK_PREFIX: /opt/vk
+
 jobs:
-  linux-x86_64:
-    # 22.04 on purpose: the glibc of the build machine decides how far the
-    # artefact reaches, and 2.35 covers Debian 12, Ubuntu 22.04 and Mint 21,
-    # which are exactly the ones a newer build leaves out.
-    runs-on: ubuntu-22.04
+  linux-wheel:
+    name: linux-wheel (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Build dependencies
-        # The shader compiler does not come from Ubuntu here. glslc and
-        # libshaderc-dev are absent from 22.04, and 22.04 is not negotiable:
-        # the glibc of the build machine is what decides how far the artefact
-        # reaches. The recipe recorded in the decision document was derived on
-        # a newer Ubuntu, where those packages exist; the two constraints meet
-        # only through the LunarG repository, which is the upstream publisher
-        # of the Vulkan SDK.
-        #
-        # This adds a third-party apt source to the build. It is pinned to the
-        # distribution codename and its signing key is fetched over https from
-        # the publisher, which is the same trust we already place in the
-        # distribution's own mirrors, and no more.
+        # libvulkan1 is the loader, linked by its soname. The development
+        # headers of 22.04 are not installed on purpose: they are 1.3.204,
+        # older than what the Vulkan backend compiles against, and leaving
+        # them out means the build cannot pick them up by accident.
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential cmake wget ca-certificates
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc > /dev/null
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list \
-            https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends vulkan-sdk
-          echo "glslc: $(glslc --version | head -1)"
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git python3 wget ca-certificates libvulkan1
+
+      - name: Shader compiler and Vulkan headers, from cache
+        id: vk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VK_PREFIX }}
+          key: vk-${{ matrix.runner }}-shaderc-${{ env.SHADERC_TAG }}-headers-${{ env.VULKAN_HEADERS_TAG }}
+
+      - name: Shader compiler and Vulkan headers, from source
+        if: steps.vk-cache.outputs.cache-hit != 'true'
+        # git-sync-deps fetches glslang, SPIRV-Tools and SPIRV-Headers at the
+        # revisions shaderc pins in its DEPS file for this tag, so the tag
+        # alone decides the whole toolchain. Only the glslc target is built:
+        # the library, the tests and the examples are not needed here.
+        run: |
+          set -euo pipefail
+          sudo mkdir -p "${VK_PREFIX}/bin" && sudo chown -R "$(id -u)" "${VK_PREFIX}"
+
+          git clone --depth 1 --branch "${VULKAN_HEADERS_TAG}" \
+            https://github.com/KhronosGroup/Vulkan-Headers /tmp/vulkan-headers
+          cmake -S /tmp/vulkan-headers -B /tmp/vulkan-headers/build \
+            -DCMAKE_INSTALL_PREFIX="${VK_PREFIX}"
+          cmake --install /tmp/vulkan-headers/build
+
+          git clone --depth 1 --branch "${SHADERC_TAG}" \
+            https://github.com/google/shaderc /tmp/shaderc
+          python3 /tmp/shaderc/utils/git-sync-deps
+          cmake -S /tmp/shaderc -B /tmp/shaderc/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSHADERC_SKIP_TESTS=ON \
+            -DSHADERC_SKIP_EXAMPLES=ON \
+            -DSHADERC_SKIP_COPYRIGHT_CHECK=ON \
+            -DSPIRV_SKIP_TESTS=ON \
+            -DSPIRV_SKIP_EXECUTABLES=ON \
+            -DENABLE_GLSLANG_BINARIES=OFF
+          cmake --build /tmp/shaderc/build --target glslc_exe
+          cp /tmp/shaderc/build/glslc/glslc "${VK_PREFIX}/bin/glslc"
+
+      - name: The toolchain answers
+        run: |
+          set -euo pipefail
+          echo "glslc: $("${VK_PREFIX}/bin/glslc" --version | head -1)"
+          grep -m1 "VK_HEADER_VERSION " "${VK_PREFIX}/include/vulkan/vulkan_core.h"
+          ls -l /usr/lib/*-linux-gnu/libvulkan.so.1
 
       - uses: actions/setup-python@v5
         with:
@@ -87,11 +159,20 @@ jobs:
         # The parallel level is a memory limit, not a speed choice: the first
         # build died with cc1plus killed while compiling the shader unit, and
         # two jobs is what fits.
+        #
+        # The three Vulkan paths are given explicitly rather than left to
+        # FindVulkan: the headers live outside the system prefix, and the
+        # loader has no unversioned .so without the development package.
         env:
-          CMAKE_ARGS: "-DGGML_BACKEND_DL=ON -DGGML_VULKAN=ON -DGGML_NATIVE=OFF"
           CMAKE_BUILD_PARALLEL_LEVEL: "2"
-          VERSION: ${{ github.event.inputs.version || '0.3.35' }}
+          VERSION: ${{ inputs.version || '0.3.35' }}
         run: |
+          set -euo pipefail
+          LOADER=$(ls /usr/lib/*-linux-gnu/libvulkan.so.1)
+          export CMAKE_ARGS="-DGGML_BACKEND_DL=ON -DGGML_VULKAN=ON -DGGML_NATIVE=OFF \
+            -DVulkan_INCLUDE_DIR=${VK_PREFIX}/include \
+            -DVulkan_LIBRARY=${LOADER} \
+            -DVulkan_GLSLC_EXECUTABLE=${VK_PREFIX}/bin/glslc"
           python -m pip install --upgrade pip build wheel
           python -m pip wheel "llama-cpp-python==${VERSION}" \
             --no-binary llama-cpp-python \
@@ -159,7 +240,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: llama-wheel-linux-x86_64
+          name: llama-wheel-linux-${{ matrix.arch }}
           path: |
             dist/*.whl
             dist/SHA256SUMS
@@ -169,24 +250,29 @@ jobs:
     # The self-contained Linux package, built where the wheel was built.
     #
     # WHY IT EXISTS
-    #   Today the Linux packages build their environment on first launch,
-    #   against the distribution's Python. That hands the product to the
+    #   The Linux packages used to build their environment on first launch,
+    #   against the distribution's Python. That handed the product to the
     #   distribution: Arch ships 3.14 and Debian 12 ships 3.11, and on
     #   2026-09-23 we were out of range on both sides on the same day. A
-    #   bundle replaces that moving target with one number we choose.
-    #
-    #   The number is the glibc of this runner. It is compatible forwards, so
-    #   building on 22.04 (2.35) reaches Debian 12, Ubuntu 22.04 and Mint 21
-    #   as well as everything newer, and where it does not reach it says so
-    #   out loud instead of failing quietly.
-    needs: linux-x86_64
-    runs-on: ubuntu-22.04
+    #   bundle replaces that moving target with one number we choose, the
+    #   glibc of this runner.
+    name: linux-bundle (${{ matrix.arch }})
+    needs: linux-wheel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: llama-wheel-linux-x86_64
+          name: llama-wheel-linux-${{ matrix.arch }}
           path: wheel/
 
       - uses: astral-sh/setup-uv@v5
@@ -195,10 +281,10 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Dependencies, then our own inference wheel over the pinned one
-        # Installed after the sync on purpose: uv.lock pins the wheel from a
-        # third-party index, and replacing it is the whole point, so it has to
-        # win.
+      - name: Dependencies, then our own inference wheel
+        # The pinned inference wheel is not installed at all: uv.lock takes it
+        # from a third-party index that has no arm64 build, where uv would
+        # fall back to compiling it from source, only for us to replace it.
         #
         # Everything after this point runs with --no-sync, and that is not
         # caution. Without it the next uv run reconciles the environment with
@@ -208,7 +294,7 @@ jobs:
         # carrying six files and Vulkan was not among them.
         run: |
           set -euo pipefail
-          uv sync --extra desktop
+          uv sync --extra desktop --no-install-package llama-cpp-python
           uv pip install --reinstall wheel/llama_cpp_python-*.whl
           uv run --no-sync python - <<'PY'
           import pathlib
@@ -242,7 +328,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-bundle-x86_64
+          name: linux-bundle-${{ matrix.arch }}
           path: dist/SpendifAi
           retention-days: 14
 
@@ -250,26 +336,40 @@ jobs:
     # The package, and the only question that matters about it: does it run on
     # a machine we have never had.
     #
-    # Debian 12 is the test because it is the one today's package excludes. It
-    # ships Python 3.11, the project needs 3.12 or newer, and the old package
-    # built its environment against whatever Python the distribution had. A
-    # bundle carrying its own interpreter is the whole point, and this is
-    # where that claim is either true or not.
+    # Debian 12 is the test because it is the floor: it ships Python 3.11, the
+    # project needs 3.12 or newer, and the old package built its environment
+    # against whatever Python the distribution had. A bundle carrying its own
+    # interpreter is the whole point, and this is where that claim is either
+    # true or not. Each architecture is tested on its own native runner.
+    name: linux-deb (${{ matrix.arch }})
     needs: linux-bundle
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: linux-bundle-x86_64
+          name: linux-bundle-${{ matrix.arch }}
           path: bundle/
 
       - name: Build the package
+        env:
+          APP_VERSION: ${{ inputs.app_version }}
         run: |
           set -euo pipefail
           chmod +x bundle/SpendifAi || true
-          bash packaging/linux/build-deb.sh --bundle-dir "$(pwd)/bundle"
+          VERSION_ARGS=()
+          [ -n "${APP_VERSION}" ] && VERSION_ARGS=(--version "${APP_VERSION}")
+          bash packaging/linux/build-deb.sh --bundle-dir "$(pwd)/bundle" \
+            --arch "${{ matrix.arch }}" "${VERSION_ARGS[@]}"
           ls -lh build/*.deb
 
       - name: What it declares it needs
@@ -279,11 +379,6 @@ jobs:
         run: dpkg-deb -I build/spendifai_*.deb | sed -n "1,25p"
 
       - name: It installs and runs on Debian 12
-        # Debian 12 is the test because it is the distribution today's package
-        # excludes: it ships Python 3.11, the project needs 3.12 or newer, and
-        # the old package built its environment against whatever Python it
-        # found. A bundle carrying its own interpreter is the whole claim.
-        #
         # The probe is written as one line, on the host. Passed as -c it must
         # be unindented and unbroken, and nesting a multi-line program through
         # YAML, docker and bash is how the first attempt died on an
@@ -300,6 +395,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: spendifai-deb
+          name: spendifai-deb-${{ matrix.arch }}
           path: build/*.deb
           retention-days: 14

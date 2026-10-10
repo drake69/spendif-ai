@@ -20,10 +20,12 @@ on:
     paths:
       - 'packaging/linux/**'
       - '.github/workflows/apt-repo.yml'
+      - '.github/workflows/build-llama-wheels.yml'
   pull_request:
     paths:
       - 'packaging/linux/**'
       - '.github/workflows/apt-repo.yml'
+      - '.github/workflows/build-llama-wheels.yml'
   release:
     types: [published]
   schedule:
@@ -33,9 +35,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  packages:
+    # The real packages, built the way a release builds them. The archive is
+    # proven with what users will install, not with a stand-in: a stand-in
+    # would prove the index and the signature and nothing about the payload.
+    name: Packages
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/build-llama-wheels.yml
+    with:
+      app_version: 9.9.9
+
   validate:
     name: Generated archive works with a real apt
-    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs: packages
     runs-on: ubuntu-latest
     container: ubuntu:24.04
 
@@ -48,12 +60,15 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - name: Build both .deb packages
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          bash packaging/linux/build-deb.sh --version 9.9.9 --arch amd64
-          bash packaging/linux/build-deb.sh --version 9.9.9 --arch arm64
-          ls -la build/*.deb
+      - name: Both .deb packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: spendifai-deb-*
+          path: build/
+          merge-multiple: true
+
+      - name: What arrived
+        run: ls -la build/*.deb
 
       - name: Lint the package
         run: |
@@ -144,7 +159,7 @@ jobs:
           apt-get update -qq
           apt-cache policy spendifai
           apt-get install -y -qq spendifai 2>&1 | tail -5
-          test -f /opt/spendifai/app.py
+          test -x /opt/spendifai/SpendifAi
           test -f /opt/spendifai/.install_method
           grep -qx deb /opt/spendifai/.install_method
           echo "Installed from the generated APT archive."
