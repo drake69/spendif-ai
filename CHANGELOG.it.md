@@ -8,6 +8,10 @@ Il versioning segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Aggiunto
+- I resoconti di prova costruiscono da soli la tabella di compatibilita'. La pagina Informazioni tecniche apre un modulo GitHub gia' compilato con il suo resoconto, e un workflow lo legge, aggiunge il computer a `docs/compatibility.md` (e `docs/compatibility.it.md`) e propone la modifica come pull request. Nessuno ricopia a mano sistema operativo, scheda grafica o tempi. Il modulo e' pubblico, quindi il resoconto e' trattato come dato non fidato: solo campi nominati, di lunghezza limitata, e niente che nella tabella possa diventare un link o HTML
+- Il resoconto tecnico nomina la distribuzione ("Debian GNU/Linux 13 (trixie)") invece del kernel, e mostra l'ultima importazione da sola accanto alla media, cosi' si confrontano una corsa sul processore e una sulla scheda grafica. Il file salvato dice cosa contiene: `spendifai-report_0.3.1_debian-13_arm64_cpu_20261010-1432.xml`
+
 ## [0.3.1] - 2026-09-23
 
 ### Corretto

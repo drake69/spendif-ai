@@ -1169,5 +1169,9 @@
   "diagnostics.download": "Save the document",
   "upload.progress_auto_elapsed": "Auto-refresh - {pct}% completed - {elapsed} elapsed",
   "upload.completed_in": "Completed in {elapsed}",
-  "diagnostics.support": "**Need help?** Save the document above and attach it to an email to [{address}]({mailto}). Describe what you were doing: the file says the rest."
+  "diagnostics.support": "**Need help?** Save the document above and attach it to an email to [{address}]({mailto}). Describe what you were doing: the file says the rest.",
+  "diagnostics.last_job": "Last import on its own ({rows} rows): compare it after running the same file on the processor and on the graphics card.",
+  "diagnostics.open_issue": "Send as a test report on GitHub",
+  "diagnostics.open_issue_help": "Opens a public form on GitHub with this document already filled in. Nothing is sent until you submit it. It needs a GitHub account; if you do not have one, use the email below.",
+  "diagnostics.open_issue_paste": "The document is too long to fill in the form automatically: copy it from the box above and paste it into the form."
 }
